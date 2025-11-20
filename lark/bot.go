@@ -28,75 +28,196 @@ func NewBot(webhookURL string) *Bot {
 	}
 }
 
-// LarkMessage 飞书消息结构
-type LarkMessage struct {
-	MsgType string      `json:"msg_type"`
-	Content LarkContent `json:"content"`
+// LarkCardMessage for interactive card
+type LarkCardMessage struct {
+	MsgType string   `json:"msg_type"`
+	Card    LarkCard `json:"card"`
 }
 
-type LarkContent struct {
-	Text string `json:"text"`
+type LarkCard struct {
+	Config   CardConfig    `json:"config"`
+	Header   CardHeader    `json:"header"`
+	Elements []interface{} `json:"elements"`
+}
+
+type CardConfig struct {
+	WideScreenMode bool `json:"wide_screen_mode"`
+}
+
+type CardHeader struct {
+	Title    CardText `json:"title"`
+	Template string   `json:"template"`
+}
+
+type CardText struct {
+	Tag     string `json:"tag"`
+	Content string `json:"content"`
+}
+
+type DivElement struct {
+	Tag    string   `json:"tag"`
+	Text   *CardText `json:"text,omitempty"`
+	Fields []Field  `json:"fields,omitempty"`
+}
+
+type Field struct {
+	IsShort bool     `json:"is_short"`
+	Text    CardText `json:"text"`
+}
+
+type HrElement struct {
+	Tag string `json:"tag"`
 }
 
 // SendSignal 发送交易信号
 func (b *Bot) SendSignal(signal models.Signal) error {
-	message := b.formatMessage(signal)
-	return b.sendMessage(message)
+	cardMessage := b.formatCardMessage(signal)
+	jsonData, err := json.Marshal(cardMessage)
+	if err != nil {
+		return fmt.Errorf("序列化消息卡片失败: %w", err)
+	}
+	return b.sendMessage(jsonData)
 }
 
-// formatMessage 格式化消息
-func (b *Bot) formatMessage(signal models.Signal) string {
+// formatCardMessage 格式化消息为飞书卡片
+func (b *Bot) formatCardMessage(signal models.Signal) LarkCardMessage {
 	var signalDescription string
+	var headerTemplate string
+
 	switch signal.SignalType {
 	case models.BullishBreakout:
-		signalDescription = "看涨突破 OI↑|Price↑"
+		signalDescription = "看涨突破 OI↑ | Price↑"
+		headerTemplate = "red"
 	case models.BearishMomentum:
-		signalDescription = "看跌动量 OI↑|Price↓"
+		signalDescription = "看跌动量 OI↑ | Price↓"
+		headerTemplate = "green"
 	case models.PossibleFakeout:
-		signalDescription = "可能假突破 OI↓|Price↑"
+		signalDescription = "可能假突破 OI↓ | Price↑"
+		headerTemplate = "yellow"
 	case models.MarketContraction:
-		signalDescription = "市场收缩 OI↓|Price↓"
+		signalDescription = "市场收缩 OI↓ | Price↓"
+		headerTemplate = "blue"
 	default:
 		signalDescription = "未知信号"
+		headerTemplate = "grey"
 	}
 
-	// 根据信号类型决定是买入还是卖出
 	tradeAction := "Buy"
 	if signal.SignalType == models.BearishMomentum || signal.SignalType == models.MarketContraction {
 		tradeAction = "Sell"
 	}
 
-	message := fmt.Sprintf(`%s%s %s\n⏰ %s (周期: 15)\n⚠️ 交易建议(ATR:%.4f)\n%s:%.4f  SL:%.4f Qty:%.2f\n📌%.2f%% OI + %.2f%% Price`,
-		signal.Symbol,
-		signal.SignalType.Emoji(),
-		signalDescription,
-		signal.Timestamp.Format("01-02 15:04:05"),
-		signal.ATR,
-		tradeAction,
-		signal.CurrentPrice,
-		signal.StopLoss,
-		signal.Quantity,
-		signal.OIChange,
-		signal.PriceChange,
-	)
-
-	return message
+	card := LarkCardMessage{
+		MsgType: "interactive",
+		Card: LarkCard{
+			Config: CardConfig{
+				WideScreenMode: true,
+			},
+			Header: CardHeader{
+				Title: CardText{
+					Tag:     "plain_text",
+					Content: fmt.Sprintf("%s %s %s", signal.Symbol, signal.SignalType.Emoji(), signalDescription),
+				},
+				Template: headerTemplate,
+			},
+			Elements: []interface{}{
+				DivElement{
+					Tag: "div",
+					Fields: []Field{
+						{
+							IsShort: true,
+							Text: CardText{
+								Tag:     "lark_md",
+								Content: fmt.Sprintf("**时间**: %s", signal.Timestamp.Format("01-02 15:04:05")),
+							},
+						},
+						{
+							IsShort: true,
+							Text: CardText{
+								Tag:     "lark_md",
+								Content: "**周期**: 15m",
+							},
+						},
+					},
+				},
+				HrElement{
+					Tag: "hr",
+				},
+				DivElement{
+					Tag:  "div",
+					Text: &CardText{
+						Tag: "lark_md",
+						Content: "⚠️ **交易建议**",
+					},
+				},
+				DivElement{
+					Tag: "div",
+					Fields: []Field{
+						{
+							IsShort: true,
+							Text: CardText{
+								Tag:     "lark_md",
+								Content: fmt.Sprintf("**%s**: `%.4f`", tradeAction, signal.CurrentPrice),
+							},
+						},
+						{
+							IsShort: true,
+							Text: CardText{
+								Tag:     "lark_md",
+								Content: fmt.Sprintf("**StopLoss**: `%.4f`", signal.StopLoss),
+							},
+						},
+					},
+				},
+                DivElement{
+					Tag: "div",
+					Fields: []Field{
+						{
+							IsShort: true,
+							Text: CardText{
+								Tag:     "lark_md",
+								Content: fmt.Sprintf("**Quantity**: `%.2f`", signal.Quantity),
+							},
+						},
+						{
+							IsShort: true,
+							Text: CardText{
+								Tag:     "lark_md",
+								Content: fmt.Sprintf("**ATR**: `%.4f`", signal.ATR),
+							},
+						},
+					},
+				},
+				HrElement{
+					Tag: "hr",
+				},
+				DivElement{
+					Tag: "div",
+					Fields: []Field{
+						{
+							IsShort: true,
+							Text: CardText{
+								Tag:     "lark_md",
+								Content: fmt.Sprintf("📌 **OI Change**: %.2f%%", signal.OIChange),
+							},
+						},
+						{
+							IsShort: true,
+							Text: CardText{
+								Tag:     "lark_md",
+								Content: fmt.Sprintf("📈 **Price Change**: %.2f%%", signal.PriceChange),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	return card
 }
 
 // sendMessage 发送消息到飞书
-func (b *Bot) sendMessage(text string) error {
-	msg := LarkMessage{
-		MsgType: "text",
-		Content: LarkContent{
-			Text: text,
-		},
-	}
-
-	jsonData, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("序列化消息失败: %w", err)
-	}
-
+func (b *Bot) sendMessage(jsonData []byte) error {
 	resp, err := b.client.Post(b.webhookURL, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("发送消息失败: %w", err)
@@ -109,7 +230,6 @@ func (b *Bot) sendMessage(text string) error {
 		return fmt.Errorf("飞书API错误 [%d]: %s", resp.StatusCode, string(body))
 	}
 
-	// 检查响应
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err == nil {
 		if code, ok := result["code"].(float64); ok && code != 0 {
@@ -117,9 +237,10 @@ func (b *Bot) sendMessage(text string) error {
 		}
 	}
 
-	log.Printf("消息已发送到飞书: %s", text[:min(50, len(text))])
+	log.Printf("消息卡片已发送到飞书")
 	return nil
 }
+
 
 // ProcessSignals 处理信号通道
 func (b *Bot) ProcessSignals(signalCh <-chan models.Signal) {
@@ -127,15 +248,7 @@ func (b *Bot) ProcessSignals(signalCh <-chan models.Signal) {
 		if err := b.SendSignal(signal); err != nil {
 			log.Printf("发送飞书消息失败: %v", err)
 		}
-
 		// 避免触发速率限制
 		time.Sleep(1 * time.Second)
 	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
