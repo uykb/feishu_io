@@ -49,8 +49,8 @@ func main() {
 	// 初始化信号检测器
 	detector := strategy.NewSignalDetector(cfg.OIThreshold, cfg.PriceThreshold, signalCh)
 
-	// 初始化Telegram机器人
-	bot := telegram.NewBot(cfg.TelegramBotToken, cfg.TelegramChatID)
+	// 初始化飞书机器人
+	bot := lark.NewBot(cfg.LarkWebhookURL)
 
 	// 启动各个协程
 	log.Println("启动数据处理协程...")
