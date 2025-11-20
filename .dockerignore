@@ -1,0 +1,37 @@
+# Git
+.git
+.gitignore
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Binaries
+*.exe
+binance-monitor
+binance-monitor.exe
+
+# Logs
+*.log
+
+# Test files
+*_test.go
+
+# Documentation
+README.md
+*.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/

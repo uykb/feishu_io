@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  binance-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: binance-monitor
+    restart: unless-stopped
+    
+    # 环境变量配置（敏感信息）
+    environment:
+      # 飞书机器人 Webhook URL（必填）
+      - LARK_WEBHOOK_URL=${LARK_WEBHOOK_URL}
+      
+      # 监控参数（可选，有默认值）
+      - OI_THRESHOLD=${OI_THRESHOLD:-5.0}
+      - PRICE_THRESHOLD=${PRICE_THRESHOLD:-2.0}
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-60}
+      
+      # 时区设置
+      - TZ=Asia/Shanghai
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    
+    # 网络配置
+    networks:
+      - binance-net
+
+networks:
+  binance-net:
+    driver: bridge
