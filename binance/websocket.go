@@ -26,15 +26,15 @@ type KlineWSMessage struct {
 		EventTime int64  `json:"E"`
 		Symbol    string `json:"s"`
 		Kline     struct {
-			StartTime int64  `json:"t"`
-			EndTime   int64  `json:"T"`
-			Symbol    string `json:"s"`
-			Interval  string `json:"i"`
-			Open      string `json:"o"`
-			Close     string `json:"c"`
-			High      string `json:"h"`
-			Low       string `json:"l"`
-			IsClosed  bool   `json:"x"`
+			StartTime int64           `json:"t"`
+			EndTime   int64           `json:"T"`
+			Symbol    string          `json:"s"`
+			Interval  string          `json:"i"`
+			Open      json.Number     `json:"o"`
+			Close     json.Number     `json:"c"`
+			High      json.Number     `json:"h"`
+			Low       json.Number     `json:"l"`
+			IsClosed  bool            `json:"x"`
 		} `json:"k"`
 	} `json:"data"`
 }
@@ -121,10 +121,10 @@ func (ks *KlineSubscriber) readMessages() {
 
 // parseKlineData 解析K线数据
 func (ks *KlineSubscriber) parseKlineData(msg *KlineWSMessage) models.KlineData {
-	open, _ := strconv.ParseFloat(msg.Data.Kline.Open, 64)
-	close, _ := strconv.ParseFloat(msg.Data.Kline.Close, 64)
-	high, _ := strconv.ParseFloat(msg.Data.Kline.High, 64)
-	low, _ := strconv.ParseFloat(msg.Data.Kline.Low, 64)
+	open, _ := msg.Data.Kline.Open.Float64()
+	close, _ := msg.Data.Kline.Close.Float64()
+	high, _ := msg.Data.Kline.High.Float64()
+	low, _ := msg.Data.Kline.Low.Float64()
 
 	return models.KlineData{
 		Symbol:    msg.Data.Symbol,
