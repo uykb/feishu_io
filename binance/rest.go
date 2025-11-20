@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -77,9 +78,10 @@ func (of *OIFetcher) FetchSymbols() ([]string, error) {
 	}
 
 	var symbols []string
+	validSymbol := regexp.MustCompile(`^[A-Z0-9]+$`)
 	for _, s := range exchangeInfo.Symbols {
 		// 只选择USDT永续合约且状态为TRADING的交易对
-		if s.Status == "TRADING" && s.ContractType == "PERPETUAL" && s.QuoteAsset == "USDT" {
+		if s.Status == "TRADING" && s.ContractType == "PERPETUAL" && s.QuoteAsset == "USDT" && validSymbol.MatchString(s.Symbol) {
 			symbols = append(symbols, s.Symbol)
 		}
 	}
