@@ -9,9 +9,9 @@ import (
 
 	"binance-monitor/binance"
 	"binance-monitor/config"
+	"binance-monitor/lark"
 	"binance-monitor/models"
 	"binance-monitor/strategy"
-	"binance-monitor/telegram"
 )
 
 func main() {
