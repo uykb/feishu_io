@@ -1,17 +1,17 @@
 package strategy
 
 import (
+	"binance-monitor/models"
 	"log"
 	"sync"
 	"time"
-
-	"binance-monitor/models"
 )
 
-// PriceStorage 价格存储
-type PriceStorage struct {
-	mu     sync.RWMutex
-	prices map[string]float64 // symbol -> close price
+// KlineHistory K线历史存储
+type KlineHistory struct {
+	mu        sync.RWMutex
+	klines    map[string][]models.KlineData // symbol -> []KlineData
+	maxLength int                           // 最大历史记录长度
 }
 
 // OIStorage 持仓量存储
@@ -22,18 +22,20 @@ type OIStorage struct {
 
 // SignalDetector 信号检测器
 type SignalDetector struct {
-	priceStorage   *PriceStorage
+	klineHistory   *KlineHistory
 	oiStorage      *OIStorage
 	oiThreshold    float64
 	priceThreshold float64
 	signalCh       chan models.Signal
+	atrPeriod      int
 }
 
 // NewSignalDetector 创建信号检测器
 func NewSignalDetector(oiThreshold, priceThreshold float64, signalCh chan models.Signal) *SignalDetector {
 	return &SignalDetector{
-		priceStorage: &PriceStorage{
-			prices: make(map[string]float64),
+		klineHistory: &KlineHistory{
+			klines:    make(map[string][]models.KlineData),
+			maxLength: 20, // 存储足够的K线用于计算ATR(14)等指标
 		},
 		oiStorage: &OIStorage{
 			ois: make(map[string]float64),
@@ -41,23 +43,31 @@ func NewSignalDetector(oiThreshold, priceThreshold float64, signalCh chan models
 		oiThreshold:    oiThreshold,
 		priceThreshold: priceThreshold,
 		signalCh:       signalCh,
+		atrPeriod:      14, // ATR 计算周期
 	}
 }
 
 // ProcessKlineData 处理K线数据
 func (sd *SignalDetector) ProcessKlineData(klineDataCh <-chan models.KlineData) {
 	for kline := range klineDataCh {
-		sd.priceStorage.mu.Lock()
-		previousPrice, exists := sd.priceStorage.prices[kline.Symbol]
-		sd.priceStorage.prices[kline.Symbol] = kline.Close
-		sd.priceStorage.mu.Unlock()
+		sd.klineHistory.mu.Lock()
+		history := sd.klineHistory.klines[kline.Symbol]
+		history = append(history, kline)
+		if len(history) > sd.klineHistory.maxLength {
+			history = history[1:] // 维持最大长度
+		}
+		sd.klineHistory.klines[kline.Symbol] = history
 
-		if !exists {
+		// 需要至少两条K线来计算价格变化
+		if len(history) < 2 {
+			sd.klineHistory.mu.Unlock()
 			continue
 		}
+		previousPrice := history[len(history)-2].Close
+		sd.klineHistory.mu.Unlock() // checkSignal会再次锁定
 
 		// 检查是否触发信号
-		sd.checkSignal(kline.Symbol, previousPrice, kline.Close, kline.Timestamp)
+		sd.checkSignal(kline, previousPrice)
 	}
 }
 
@@ -71,10 +81,10 @@ func (sd *SignalDetector) ProcessOIData(oiDataCh <-chan models.OIData) {
 }
 
 // checkSignal 检查是否触发信号
-func (sd *SignalDetector) checkSignal(symbol string, previousPrice, currentPrice float64, timestamp time.Time) {
+func (sd *SignalDetector) checkSignal(currentKline models.KlineData, previousPrice float64) {
 	// 获取当前OI和上一次OI
 	sd.oiStorage.mu.RLock()
-	currentOI, oiExists := sd.oiStorage.ois[symbol]
+	currentOI, oiExists := sd.oiStorage.ois[currentKline.Symbol]
 	sd.oiStorage.mu.RUnlock()
 
 	if !oiExists || previousPrice == 0 {
@@ -82,13 +92,14 @@ func (sd *SignalDetector) checkSignal(symbol string, previousPrice, currentPrice
 	}
 
 	// 计算价格变化率
+	currentPrice := currentKline.Close
 	priceChange := ((currentPrice - previousPrice) / previousPrice) * 100
 
 	// 由于OI是轮询获取的，我们需要存储历史OI来计算变化率
 	// 简化处理：使用内存缓存存储上一个周期的OI
-	previousOI := sd.getPreviousOI(symbol)
+	previousOI := sd.getPreviousOI(currentKline.Symbol)
 	if previousOI == 0 {
-		sd.savePreviousOI(symbol, currentOI)
+		sd.savePreviousOI(currentKline.Symbol, currentOI)
 		return
 	}
 
@@ -118,26 +129,51 @@ func (sd *SignalDetector) checkSignal(symbol string, previousPrice, currentPrice
 	}
 
 	if matched {
+		// -- ATR, Stop-Loss, and Quantity Calculation --
+		sd.klineHistory.mu.RLock()
+		klineHistory, historyExists := sd.klineHistory.klines[currentKline.Symbol]
+		sd.klineHistory.mu.RUnlock()
+
+		var atr, stopLoss, quantity float64
+		if historyExists {
+			atr = CalculateATR(klineHistory, sd.atrPeriod)
+
+			if atr > 0 {
+				stopLossDistance := 2 * atr
+				// 根据信号类型计算止损和仓位
+				if signalType == models.BullishBreakout || signalType == models.PossibleFakeout { // 看涨/做多
+					stopLoss = currentPrice - stopLossDistance
+					quantity = 1 / stopLossDistance // 固定1 USDT风险
+				} else { // 看跌/做空
+					stopLoss = currentPrice + stopLossDistance
+					quantity = 1 / stopLossDistance // 固定1 USDT风险
+				}
+			}
+		}
+
 		signal := models.Signal{
-			Symbol:       symbol,
+			Symbol:       currentKline.Symbol,
 			SignalType:   signalType,
 			PriceChange:  priceChange,
 			OIChange:     oiChange,
 			CurrentPrice: currentPrice,
 			CurrentOI:    currentOI,
-			Timestamp:    timestamp,
+			Timestamp:    currentKline.Timestamp,
+			ATR:          atr,
+			StopLoss:     stopLoss,
+			Quantity:     quantity,
 		}
 
 		select {
 		case sd.signalCh <- signal:
-			log.Printf("触发信号: %s - %s (OI变化: %.2f%%, 价格变化: %.2f%%)",
-				symbol, signalType.String(), oiChange, priceChange)
+			log.Printf("触发信号: %s - %s (OI: %.2f%%, P: %.2f%%, ATR: %.4f, SL: %.4f, Qty: %.2f)",
+				currentKline.Symbol, signalType.String(), oiChange, priceChange, atr, stopLoss, quantity)
 		default:
-			log.Printf("信号通道已满，丢弃 %s 的信号", symbol)
+			log.Printf("信号通道已满，丢弃 %s 的信号", currentKline.Symbol)
 		}
 
 		// 更新上一个OI
-		sd.savePreviousOI(symbol, currentOI)
+		sd.savePreviousOI(currentKline.Symbol, currentOI)
 	}
 }
 

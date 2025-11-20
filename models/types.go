@@ -33,13 +33,16 @@ type MarketData struct {
 
 // Signal 交易信号
 type Signal struct {
-	Symbol        string
-	SignalType    SignalType
-	PriceChange   float64
-	OIChange      float64
-	CurrentPrice  float64
-	CurrentOI     float64
-	Timestamp     time.Time
+	Symbol       string
+	SignalType   SignalType
+	PriceChange  float64
+	OIChange     float64
+	CurrentPrice float64
+	CurrentOI    float64
+	Timestamp    time.Time
+	ATR          float64 // 平均真实波幅
+	StopLoss     float64 // 建议止损价
+	Quantity     float64 // 建议仓位大小
 }
 
 // SignalType 信号类型
