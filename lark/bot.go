@@ -86,25 +86,19 @@ func (b *Bot) formatCardMessage(signal models.Signal) LarkCardMessage {
 
 	switch signal.SignalType {
 	case models.BullishBreakout:
-		signalDescription = "看涨突破 OI↑ | Price↑"
-		headerTemplate = "red"
-	case models.BearishMomentum:
-		signalDescription = "看跌动量 OI↑ | Price↓"
+		signalDescription = "Bullish Breakout OI↑ | Price↑"
 		headerTemplate = "green"
-	case models.PossibleFakeout:
-		signalDescription = "可能假突破 OI↓ | Price↑"
-		headerTemplate = "yellow"
-	case models.MarketContraction:
-		signalDescription = "市场收缩 OI↓ | Price↓"
-		headerTemplate = "blue"
+	case models.BearishMomentum:
+		signalDescription = "Bearish Momentum OI↑ | Price↓"
+		headerTemplate = "red"
 	default:
-		signalDescription = "未知信号"
+		signalDescription = "Unknown Signal"
 		headerTemplate = "grey"
 	}
 
-	tradeAction := "Buy"
-	if signal.SignalType == models.BearishMomentum || signal.SignalType == models.MarketContraction {
-		tradeAction = "Sell"
+	tradeAction := "Long"
+	if signal.SignalType == models.BearishMomentum {
+		tradeAction = "Short"
 	}
 
 	card := LarkCardMessage{
@@ -116,7 +110,7 @@ func (b *Bot) formatCardMessage(signal models.Signal) LarkCardMessage {
 			Header: CardHeader{
 				Title: CardText{
 					Tag:     "plain_text",
-					Content: fmt.Sprintf("%s %s %s", signal.Symbol, signal.SignalType.Emoji(), signalDescription),
+					Content: fmt.Sprintf("%s %s Trading Signal", signal.Symbol, signal.SignalType.Emoji()),
 				},
 				Template: headerTemplate,
 			},
@@ -128,14 +122,14 @@ func (b *Bot) formatCardMessage(signal models.Signal) LarkCardMessage {
 							IsShort: true,
 							Text: CardText{
 								Tag:     "lark_md",
-								Content: fmt.Sprintf("**时间**: %s", signal.Timestamp.Format("01-02 15:04:05")),
+								Content: fmt.Sprintf("**Time**: %s", signal.Timestamp.Format("01-02 15:04:05")),
 							},
 						},
 						{
 							IsShort: true,
 							Text: CardText{
 								Tag:     "lark_md",
-								Content: "**周期**: 15m",
+								Content: "**Period**: 15m",
 							},
 						},
 					},
@@ -147,7 +141,7 @@ func (b *Bot) formatCardMessage(signal models.Signal) LarkCardMessage {
 					Tag:  "div",
 					Text: &CardText{
 						Tag: "lark_md",
-						Content: "⚠️ **交易建议**",
+						Content: fmt.Sprintf("**%s** - %s", signalDescription, signal.Symbol),
 					},
 				},
 				DivElement{

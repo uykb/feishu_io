@@ -49,38 +49,34 @@ type Signal struct {
 type SignalType int
 
 const (
-	BullishBreakout    SignalType = iota // OI↑ + Price↑ = 看涨突破
-	BearishMomentum                      // OI↑ + Price↓ = 看跌动量
-	PossibleFakeout                      // OI↓ + Price↑ = 可能假突破
-	MarketContraction                    // OI↓ + Price↓ = 市场收缩
+	BullishBreakout    SignalType = iota // OI↑ + Price↑ = Bullish Breakout
+	BearishMomentum                      // OI↑ + Price↓ = Bearish Momentum
+	PossibleFakeout                      // OI↓ + Price↑ = Possible Fakeout
+	MarketContraction                    // OI↓ + Price↓ = Market Contraction
 )
 
 func (st SignalType) String() string {
 	switch st {
 	case BullishBreakout:
-		return "看涨突破 (Bullish Breakout)"
+		return "Bullish Breakout"
 	case BearishMomentum:
-		return "看跌动量 (Bearish Momentum)"
+		return "Bearish Momentum"
 	case PossibleFakeout:
-		return "可能假突破 (Possible Fakeout)"
+		return "Possible Fakeout"
 	case MarketContraction:
-		return "市场收缩 (Market Contraction)"
+		return "Market Contraction"
 	default:
-		return "未知信号"
+		return "Unknown Signal"
 	}
 }
 
 func (st SignalType) Emoji() string {
 	switch st {
 	case BullishBreakout:
-		return "🔴"
-	case BearishMomentum:
 		return "🟢"
-	case PossibleFakeout:
-		return "🟡"
-	case MarketContraction:
-		return "🔵"
+	case BearishMomentum:
+		return "🔴"
 	default:
-		return "⚪"
+		return "⚪️"
 	}
 }

@@ -117,14 +117,6 @@ func (sd *SignalDetector) checkSignal(currentKline models.KlineData, previousPri
 		// OI↑ + Price↓ = 看跌动量
 		signalType = models.BearishMomentum
 		matched = true
-	} else if oiChange < -sd.oiThreshold && priceChange > sd.priceThreshold {
-		// OI↓ + Price↑ = 可能假突破
-		signalType = models.PossibleFakeout
-		matched = true
-	} else if oiChange < -sd.oiThreshold && priceChange < -sd.priceThreshold {
-		// OI↓ + Price↓ = 市场收缩
-		signalType = models.MarketContraction
-		matched = true
 	}
 
 	if matched {
