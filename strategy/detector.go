@@ -169,11 +169,12 @@ func (sd *SignalDetector) checkSignal(currentKline models.KlineData, previousPri
 		sd.klineHistory.mu.RUnlock()
 
 		var atr, stopLoss, quantity float64
+		var alertCount int
 		if historyExists {
 			atr = CalculateATR(klineHistory, sd.atrPeriod)
 
 			// -- 24小时内信号计数 --
-			alertCount := sd.getAlertCount(currentKline.Symbol)
+			alertCount = sd.getAlertCount(currentKline.Symbol)
 
 			if atr > 0 {
 				stopLossDistance := 1.5 * atr
