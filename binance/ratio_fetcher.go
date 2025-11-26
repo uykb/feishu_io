@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"binance-monitor/models"
@@ -73,7 +74,7 @@ func (rf *RatioFetcher) fetchRatio(symbol string) {
 	}
 
 	if len(data) > 0 {
-		ratio, err := parseFloat(data[0].LongShortRatio)
+		ratio, err := strconv.ParseFloat(data[0].LongShortRatio, 64)
 		if err != nil {
 			log.Printf("转换多空比失败 %s: %v", symbol, err)
 			return
