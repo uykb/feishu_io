@@ -27,6 +27,8 @@ type SignalDetector struct {
 	priceThreshold float64
 	signalCh       chan models.Signal
 	atrPeriod      int
+	alertTimestamps map[string][]time.Time
+	alertMu         sync.Mutex
 }
 
 // NewSignalDetector 创建信号检测器
@@ -43,6 +45,7 @@ func NewSignalDetector(oiThreshold, priceThreshold float64, signalCh chan models
 		priceThreshold: priceThreshold,
 		signalCh:       signalCh,
 		atrPeriod:      14, // ATR 计算周期
+		alertTimestamps: make(map[string][]time.Time),
 	}
 }
 
@@ -129,8 +132,11 @@ func (sd *SignalDetector) checkSignal(currentKline models.KlineData, previousPri
 		if historyExists {
 			atr = CalculateATR(klineHistory, sd.atrPeriod)
 
+			// -- 24小时内信号计数 --
+			alertCount := sd.getAlertCount(currentKline.Symbol)
+
 			if atr > 0 {
-				stopLossDistance := 2 * atr
+				stopLossDistance := 1.5 * atr
 				// 根据信号类型计算止损和仓位
 				if signalType == models.BullishBreakout || signalType == models.PossibleFakeout { // 看涨/做多
 					stopLoss = currentPrice - stopLossDistance
@@ -153,6 +159,7 @@ func (sd *SignalDetector) checkSignal(currentKline models.KlineData, previousPri
 			ATR:          atr,
 			StopLoss:     stopLoss,
 			Quantity:     quantity,
+			AlertsIn24h:  alertCount,
 		}
 
 		select {
@@ -182,4 +189,32 @@ func (sd *SignalDetector) savePreviousOI(symbol string, oi float64) {
 	previousOIMu.Lock()
 	defer previousOIMu.Unlock()
 	previousOIMap[symbol] = oi
+}
+
+// getAlertCount 获取并更新24小时内的信号计数
+func (sd *SignalDetector) getAlertCount(symbol string) int {
+	sd.alertMu.Lock()
+	defer sd.alertMu.Unlock()
+
+	now := time.Now()
+	cutoff := now.Add(-24 * time.Hour)
+
+	// 获取当前交易对的时间戳列表
+	timestamps := sd.alertTimestamps[symbol]
+
+	// 过滤掉旧的时间戳
+	var recentTimestamps []time.Time
+	for _, ts := range timestamps {
+		if ts.After(cutoff) {
+			recentTimestamps = append(recentTimestamps, ts)
+		}
+	}
+
+	// 添加当前时间戳
+	recentTimestamps = append(recentTimestamps, now)
+
+	// 更新存储
+	sd.alertTimestamps[symbol] = recentTimestamps
+
+	return len(recentTimestamps)
 }

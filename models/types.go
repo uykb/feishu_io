@@ -43,6 +43,7 @@ type Signal struct {
 	ATR          float64 // 平均真实波幅
 	StopLoss     float64 // 建议止损价
 	Quantity     float64 // 建议仓位大小
+	AlertsIn24h  int     // 24小时内提醒次数
 }
 
 // SignalType 信号类型

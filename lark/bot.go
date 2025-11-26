@@ -47,6 +47,7 @@ type CardConfig struct {
 type CardHeader struct {
 	Title    CardText `json:"title"`
 	Template string   `json:"template"`
+	Extra    *CardText `json:"extra,omitempty"`
 }
 
 type CardText struct {
@@ -101,19 +102,28 @@ func (b *Bot) formatCardMessage(signal models.Signal) LarkCardMessage {
 		tradeAction = "Short"
 	}
 
+	header := CardHeader{
+		Title: CardText{
+			Tag:     "plain_text",
+			Content: fmt.Sprintf("%s %s Trading Signal", signal.Symbol, signal.SignalType.Emoji()),
+		},
+		Template: headerTemplate,
+	}
+
+	if signal.AlertsIn24h > 0 {
+		header.Extra = &CardText{
+			Tag:     "plain_text",
+			Content: fmt.Sprintf("t%d", signal.AlertsIn24h),
+		}
+	}
+
 	card := LarkCardMessage{
 		MsgType: "interactive",
 		Card: LarkCard{
 			Config: CardConfig{
 				WideScreenMode: true,
 			},
-			Header: CardHeader{
-				Title: CardText{
-					Tag:     "plain_text",
-					Content: fmt.Sprintf("%s %s Trading Signal", signal.Symbol, signal.SignalType.Emoji()),
-				},
-				Template: headerTemplate,
-			},
+			Header:   header,
 			Elements: []interface{}{
 				DivElement{
 					Tag: "div",

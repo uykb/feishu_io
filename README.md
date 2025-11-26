@@ -17,19 +17,13 @@
 
 ## 信号类型
 
-程序监控以下四种信号组合：
+程序目前监控以下两种基于持仓量增加的信号组合：
 
 1. **🔴 看涨突破 (Bullish Breakout)**: OI↑ + Price↑
    - OI变化率 > 5% 且 价格变化率 > 2%
 
 2. **🟢 看跌动量 (Bearish Momentum)**: OI↑ + Price↓
    - OI变化率 > 5% 且 价格变化率 < -2%
-
-3. **🟡 可能假突破 (Possible Fakeout)**: OI↓ + Price↑
-   - OI变化率 < -5% 且 价格变化率 > 2%
-
-4. **🔵 市场收缩 (Market Contraction)**: OI↓ + Price↓
-   - OI变化率 < -5% 且 价格变化率 < -2%
 
 ## 技术架构
 
@@ -380,8 +374,6 @@ binance-monitor.exe  # Windows
 
 • OI↑ + Price↑ = 看涨突破 (Bullish Breakout)
 • OI↑ + Price↓ = 看跌动量 (Bearish Momentum)
-• OI↓ + Price↑ = 可能假突破 (Possible Fakeout)
-• OI↓ + Price↓ = 市场收缩 (Market Contraction)
 
 📊 信号解读
 OI和价格同时大幅上升，表明强劲的看涨突破信号。
