@@ -214,6 +214,18 @@ func (b *Bot) formatCardMessage(signal models.Signal) LarkCardMessage {
 						},
 					},
 				},
+				DivElement{
+					Tag: "div",
+					Fields: []Field{
+						{
+							IsShort: true,
+							Text: CardText{
+								Tag:     "lark_md",
+								Content: fmt.Sprintf("📊 **L/S Ratio**: `%.4f`", signal.LongShortRatio),
+							},
+						},
+					},
+				},
 			},
 		},
 	}

@@ -19,10 +19,17 @@ type OIStorage struct {
 	ois map[string]float64 // symbol -> open interest
 }
 
+// RatioStorage 多空比存储
+type RatioStorage struct {
+	mu     sync.RWMutex
+	ratios map[string]float64 // symbol -> long/short ratio
+}
+
 // SignalDetector 信号检测器
 type SignalDetector struct {
 	klineHistory   *KlineHistory
 	oiStorage      *OIStorage
+	ratioStorage   *RatioStorage
 	oiThreshold    float64
 	priceThreshold float64
 	signalCh       chan models.Signal
@@ -40,6 +47,9 @@ func NewSignalDetector(oiThreshold, priceThreshold float64, signalCh chan models
 		},
 		oiStorage: &OIStorage{
 			ois: make(map[string]float64),
+		},
+		ratioStorage: &RatioStorage{
+			ratios: make(map[string]float64),
 		},
 		oiThreshold:    oiThreshold,
 		priceThreshold: priceThreshold,
@@ -79,6 +89,15 @@ func (sd *SignalDetector) ProcessOIData(oiDataCh <-chan models.OIData) {
 		sd.oiStorage.mu.Lock()
 		sd.oiStorage.ois[oiData.Symbol] = oiData.OpenInterest
 		sd.oiStorage.mu.Unlock()
+	}
+}
+
+// ProcessRatioData 处理多空比数据
+func (sd *SignalDetector) ProcessRatioData(ratioDataCh <-chan models.LongShortRatioData) {
+	for ratioData := range ratioDataCh {
+		sd.ratioStorage.mu.Lock()
+		sd.ratioStorage.ratios[ratioData.Symbol] = ratioData.LongShortRatio
+		sd.ratioStorage.mu.Unlock()
 	}
 }
 
@@ -123,6 +142,26 @@ func (sd *SignalDetector) checkSignal(currentKline models.KlineData, previousPri
 	}
 
 	if matched {
+		// -- 多空比过滤 --
+		sd.ratioStorage.mu.RLock()
+		ratio, ratioExists := sd.ratioStorage.ratios[currentKline.Symbol]
+		sd.ratioStorage.mu.RUnlock()
+
+		if !ratioExists {
+			return // 如果没有多空比数据，则不过滤，直接返回
+		}
+
+		// 应用过滤逻辑
+		if signalType == models.BullishBreakout && ratio >= 1 {
+			log.Printf("过滤信号: %s 看涨信号，但多空比(%.2f) >= 1", currentKline.Symbol, ratio)
+			return
+		}
+		if signalType == models.BearishMomentum && ratio <= 1 {
+			log.Printf("过滤信号: %s 看跌信号，但多空比(%.2f) <= 1", currentKline.Symbol, ratio)
+			return
+		}
+
+
 		// -- ATR, Stop-Loss, and Quantity Calculation --
 		sd.klineHistory.mu.RLock()
 		klineHistory, historyExists := sd.klineHistory.klines[currentKline.Symbol]
@@ -160,6 +199,7 @@ func (sd *SignalDetector) checkSignal(currentKline models.KlineData, previousPri
 			StopLoss:     stopLoss,
 			Quantity:     quantity,
 			AlertsIn24h:  alertCount,
+			LongShortRatio: ratio,
 		}
 
 		select {
