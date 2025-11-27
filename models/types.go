@@ -19,13 +19,6 @@ type OIData struct {
 	Timestamp      time.Time
 }
 
-// LongShortRatioData 多空比数据
-type LongShortRatioData struct {
-	Symbol        string
-	LongShortRatio float64
-	Timestamp     time.Time
-}
-
 // MarketData 市场数据汇总
 type MarketData struct {
 	Symbol           string
@@ -51,7 +44,7 @@ type Signal struct {
 	StopLoss     float64 // 建议止损价
 	Quantity     float64 // 建议仓位大小
 	AlertsIn24h  int     // 24小时内提醒次数
-	LongShortRatio float64 // 多空比
+	ADX          float64 // ADX值
 }
 
 // SignalType 信号类型

@@ -29,7 +29,6 @@ func main() {
 	// 创建通道
 	klineDataCh := make(chan models.KlineData, 1000)
 	oiDataCh := make(chan models.OIData, 1000)
-	ratioDataCh := make(chan models.LongShortRatioData, 1000)
 	signalCh := make(chan models.Signal, 100)
 
 	// 初始化OI获取器并获取交易对列表
@@ -48,7 +47,7 @@ func main() {
 	defer klineSubscriber.Close()
 
 	// 初始化信号检测器
-	detector := strategy.NewSignalDetector(cfg.OIThreshold, cfg.PriceThreshold, signalCh)
+	detector := strategy.NewSignalDetector(cfg.OIThreshold, cfg.PriceThreshold, cfg.ADXThreshold, signalCh)
 
 	// 初始化飞书机器人
 	bot := lark.NewBot(cfg.LarkWebhookURL)
@@ -64,20 +63,11 @@ func main() {
 	go detector.ProcessOIData(oiDataCh)
 	log.Println("✓ OI数据处理协程已启动")
 
-	// 3. 多空比数据处理协程
-	go detector.ProcessRatioData(ratioDataCh)
-	log.Println("✓ 多空比数据处理协程已启动")
-
-	// 4. OI数据获取协程
+	// 3. OI数据获取协程
 	go oiFetcher.Start()
 	log.Println("✓ OI数据获取协程已启动")
 
-	// 5. 多空比数据获取协程
-	ratioFetcher := binance.NewRatioFetcher(symbols, ratioDataCh, time.Duration(cfg.CheckInterval)*time.Second)
-	go ratioFetcher.Start()
-	log.Println("✓ 多空比数据获取协程已启动")
-
-	// 6. 信号发送协程
+	// 4. 信号发送协程
 	go bot.ProcessSignals(signalCh)
 	log.Println("✓ 飞书消息发送协程已启动")
 
@@ -93,7 +83,6 @@ func main() {
 	klineSubscriber.Close()
 	close(klineDataCh)
 	close(oiDataCh)
-	close(ratioDataCh)
 	close(signalCh)
 	log.Println("程序已安全退出")
 }

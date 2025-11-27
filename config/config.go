@@ -13,6 +13,7 @@ type Config struct {
 	OIThreshold    float64
 	PriceThreshold float64
 	CheckInterval  int
+	ADXThreshold   float64
 }
 
 func Load() *Config {
@@ -24,12 +25,14 @@ func Load() *Config {
 	oiThreshold, _ := strconv.ParseFloat(getEnv("OI_THRESHOLD", "5.0"), 64)
 	priceThreshold, _ := strconv.ParseFloat(getEnv("PRICE_THRESHOLD", "2.0"), 64)
 	checkInterval, _ := strconv.Atoi(getEnv("CHECK_INTERVAL", "60"))
+	adxThreshold, _ := strconv.ParseFloat(getEnv("ADX_THRESHOLD", "20.0"), 64)
 
 	return &Config{
 		LarkWebhookURL: getEnv("LARK_WEBHOOK_URL", ""),
 		OIThreshold:    oiThreshold,
 		PriceThreshold: priceThreshold,
 		CheckInterval:  checkInterval,
+		ADXThreshold:   adxThreshold,
 	}
 }
 

@@ -148,30 +148,25 @@ func (b *Bot) formatCardMessage(signal models.Signal) LarkCardMessage {
 					Tag: "hr",
 				},
 				DivElement{
-					Tag:  "div",
-					Text: &CardText{
-						Tag: "lark_md",
-						Content: fmt.Sprintf("**%s** - %s", signalDescription, signal.Symbol),
-					},
-				},
-				DivElement{
 					Tag: "div",
 					Fields: []Field{
 						{
 							IsShort: true,
 							Text: CardText{
 								Tag:     "lark_md",
-								Content: fmt.Sprintf("**%s**: `%.4f`", tradeAction, signal.CurrentPrice),
+								Content: fmt.Sprintf("📈 **Price Change**: %.2f%%", signal.PriceChange),
 							},
 						},
 						{
 							IsShort: true,
 							Text: CardText{
 								Tag:     "lark_md",
-								Content: fmt.Sprintf("**StopLoss**: `%.4f`", signal.StopLoss),
+								Content: fmt.Sprintf("📊 **ADX(14)**: `%.2f`", signal.ADX),
 							},
 						},
 					},
+				},
+			},
 				},
                 DivElement{
 					Tag: "div",
