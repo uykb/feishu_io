@@ -36,7 +36,7 @@ func CalculateADX(klines []models.KlineData, period int) float64 {
 
 	for i := 1; i < len(klines); i++ {
 		high, low := klines[i].High, klines[i].Low
-		prevHigh, prevLow, prevClose := klines[i-1].High, klines[i-1].Low, klines[i-1].Close
+		prevHigh, prevLow := klines[i-1].High, klines[i-1].Low
 
 		upMove := high - prevHigh
 		downMove := prevLow - low
