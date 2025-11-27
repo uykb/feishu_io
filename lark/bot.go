@@ -110,13 +110,6 @@ func (b *Bot) formatCardMessage(signal models.Signal) LarkCardMessage {
 		Template: headerTemplate,
 	}
 
-	if signal.AlertsIn24h > 0 {
-		header.Extra = &CardText{
-			Tag:     "plain_text",
-			Content: fmt.Sprintf("t%d", signal.AlertsIn24h),
-		}
-	}
-
 	card := LarkCardMessage{
 		MsgType: "interactive",
 		Card: LarkCard{
@@ -128,97 +121,41 @@ func (b *Bot) formatCardMessage(signal models.Signal) LarkCardMessage {
 				DivElement{
 					Tag: "div",
 					Fields: []Field{
-						{
-							IsShort: true,
-							Text: CardText{
-								Tag:     "lark_md",
-								Content: fmt.Sprintf("**Time**: %s", signal.Timestamp.Format("01-02 15:04:05")),
-							},
-						},
-						{
-							IsShort: true,
-							Text: CardText{
-								Tag:     "lark_md",
-								Content: "**Period**: 15m",
-							},
-						},
+						{IsShort: true, Text: CardText{Tag: "lark_md", Content: fmt.Sprintf("**Time**: %s", signal.Timestamp.Format("01-02 15:04:05"))}},
+						{IsShort: true, Text: CardText{Tag: "lark_md", Content: fmt.Sprintf("**Count**: t%d", signal.AlertsIn24h)}},
 					},
 				},
-				HrElement{
-					Tag: "hr",
+				HrElement{Tag: "hr"},
+				DivElement{
+					Tag:  "div",
+					Text: &CardText{Tag: "lark_md", Content: fmt.Sprintf("**%s**", signalDescription)},
 				},
 				DivElement{
 					Tag: "div",
 					Fields: []Field{
-						{
-							IsShort: true,
-							Text: CardText{
-								Tag:     "lark_md",
-								Content: fmt.Sprintf("📈 **Price Change**: %.2f%%", signal.PriceChange),
-							},
-						},
-						{
-							IsShort: true,
-							Text: CardText{
-								Tag:     "lark_md",
-								Content: fmt.Sprintf("📊 **ADX(14)**: `%.2f`", signal.ADX),
-							},
-						},
-					},
-				},
-			},
-				},
-                DivElement{
-					Tag: "div",
-					Fields: []Field{
-						{
-							IsShort: true,
-							Text: CardText{
-								Tag:     "lark_md",
-								Content: fmt.Sprintf("**Quantity**: `%.2f`", signal.Quantity),
-							},
-						},
-						{
-							IsShort: true,
-							Text: CardText{
-								Tag:     "lark_md",
-								Content: fmt.Sprintf("**ATR**: `%.4f`", signal.ATR),
-							},
-						},
-					},
-				},
-				HrElement{
-					Tag: "hr",
-				},
-				DivElement{
-					Tag: "div",
-					Fields: []Field{
-						{
-							IsShort: true,
-							Text: CardText{
-								Tag:     "lark_md",
-								Content: fmt.Sprintf("📌 **OI Change**: %.2f%%", signal.OIChange),
-							},
-						},
-						{
-							IsShort: true,
-							Text: CardText{
-								Tag:     "lark_md",
-								Content: fmt.Sprintf("📈 **Price Change**: %.2f%%", signal.PriceChange),
-							},
-						},
+						{IsShort: true, Text: CardText{Tag: "lark_md", Content: fmt.Sprintf("**%s**: `%.4f`", tradeAction, signal.CurrentPrice)}},
+						{IsShort: true, Text: CardText{Tag: "lark_md", Content: fmt.Sprintf("**StopLoss**: `%.4f`", signal.StopLoss)}},
 					},
 				},
 				DivElement{
 					Tag: "div",
 					Fields: []Field{
-						{
-							IsShort: true,
-							Text: CardText{
-								Tag:     "lark_md",
-								Content: fmt.Sprintf("📊 **L/S Ratio**: `%.4f`", signal.LongShortRatio),
-							},
-						},
+						{IsShort: true, Text: CardText{Tag: "lark_md", Content: fmt.Sprintf("**Quantity**: `%.2f`", signal.Quantity)}},
+						{IsShort: true, Text: CardText{Tag: "lark_md", Content: fmt.Sprintf("**ATR**: `%.4f`", signal.ATR)}},
+					},
+				},
+				HrElement{Tag: "hr"},
+				DivElement{
+					Tag: "div",
+					Fields: []Field{
+						{IsShort: true, Text: CardText{Tag: "lark_md", Content: fmt.Sprintf("📌 **OI Change**: %.2f%%", signal.OIChange)}},
+						{IsShort: true, Text: CardText{Tag: "lark_md", Content: fmt.Sprintf("📈 **Price Change**: %.2f%%", signal.PriceChange)}},
+					},
+				},
+				DivElement{
+					Tag: "div",
+					Fields: []Field{
+						{IsShort: true, Text: CardText{Tag: "lark_md", Content: fmt.Sprintf("📊 **ADX(14)**: `%.2f`", signal.ADX)}},
 					},
 				},
 			},
