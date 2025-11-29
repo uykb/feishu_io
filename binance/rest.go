@@ -43,6 +43,7 @@ type OIFetcher struct {
 	oiDataCh    chan models.OIData
 	interval    time.Duration
 	concurrency int
+	mu          sync.RWMutex
 }
 
 // NewOIFetcher 创建持仓量获取器
@@ -54,6 +55,7 @@ func NewOIFetcher(oiDataCh chan models.OIData, interval time.Duration) *OIFetche
 		oiDataCh:    oiDataCh,
 		interval:    interval,
 		concurrency: 20, // 并发协程数
+		mu:          sync.RWMutex{},
 	}
 }
 
@@ -86,30 +88,50 @@ func (of *OIFetcher) FetchSymbols() ([]string, error) {
 		}
 	}
 
+	of.mu.Lock()
 	of.symbols = symbols
-	log.Printf("获取到 %d 个USDT永续合约交易对", len(symbols))
+	of.mu.Unlock()
+
+	log.Printf("更新交易对列表: 获取到 %d 个USDT永续合约交易对", len(symbols))
 	return symbols, nil
 }
 
 // Start 启动持仓量轮询
 func (of *OIFetcher) Start() {
-	ticker := time.NewTicker(of.interval)
-	defer ticker.Stop()
+	oiTicker := time.NewTicker(of.interval)
+	defer oiTicker.Stop()
+
+	// 每小时更新一次交易对列表
+	symbolUpdateTicker := time.NewTicker(1 * time.Hour)
+	defer symbolUpdateTicker.Stop()
 
 	// 立即执行一次
 	of.fetchAllOI()
 
-	for range ticker.C {
-		of.fetchAllOI()
+	for {
+		select {
+		case <-oiTicker.C:
+			of.fetchAllOI()
+		case <-symbolUpdateTicker.C:
+			log.Println("定时任务: 正在更新交易对列表...")
+			if _, err := of.FetchSymbols(); err != nil {
+				log.Printf("定时更新交易对列表失败: %v", err)
+			}
+		}
 	}
 }
 
 // fetchAllOI 并发获取所有交易对的持仓量
 func (of *OIFetcher) fetchAllOI() {
+	of.mu.RLock()
+	symbolsToFetch := make([]string, len(of.symbols))
+	copy(symbolsToFetch, of.symbols)
+	of.mu.RUnlock()
+
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, of.concurrency)
 
-	for _, symbol := range of.symbols {
+	for _, symbol := range symbolsToFetch {
 		wg.Add(1)
 		go func(sym string) {
 			defer wg.Done()
@@ -144,18 +166,21 @@ func (of *OIFetcher) fetchOI(symbol string) (models.OIData, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return models.OIData{}, fmt.Errorf("HTTP错误: %d", resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return models.OIData{}, fmt.Errorf("读取响应失败: %w", err)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return models.OIData{}, fmt.Errorf("HTTP错误: %d, URL: %s, Body: %s", resp.StatusCode, url, string(body))
+	}
 	if err != nil {
 		return models.OIData{}, err
 	}
 
 	var oiResp OpenInterestResponse
 	if err := json.Unmarshal(body, &oiResp); err != nil {
-		return models.OIData{}, err
+		return models.OIData{}, fmt.Errorf("解析JSON失败: %w, Body: %s", err, string(body))
 	}
 
 	oi, err := strconv.ParseFloat(oiResp.OpenInterest, 64)
@@ -172,5 +197,10 @@ func (of *OIFetcher) fetchOI(symbol string) (models.OIData, error) {
 
 // GetSymbols 返回交易对列表
 func (of *OIFetcher) GetSymbols() []string {
-	return of.symbols
+	of.mu.RLock()
+	defer of.mu.RUnlock()
+	// 返回一个副本以防止外部修改
+	symbolsCopy := make([]string, len(of.symbols))
+	copy(symbolsCopy, of.symbols)
+	return symbolsCopy
 }
