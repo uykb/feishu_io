@@ -116,7 +116,7 @@ func (ks *KlineSubscriber) subscribeAll() error {
 		}
 
 		// 短暂延迟避免请求过快
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 	}
 	return nil
 }
