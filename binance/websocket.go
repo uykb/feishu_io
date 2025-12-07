@@ -72,21 +72,52 @@ func (ks *KlineSubscriber) connect() error {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 
-	// 构建订阅流
-	streams := make([]string, len(ks.symbols))
-	for i, symbol := range ks.symbols {
-		streams[i] = fmt.Sprintf("%s@kline_15m", strings.ToLower(symbol))
-	}
-	streamParam := strings.Join(streams, "/")
-	url := fmt.Sprintf("%s?streams=%s", wsURL, streamParam)
-
-	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	// 直接连接到 stream 端点
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		return fmt.Errorf("WebSocket连接失败: %w", err)
 	}
 
 	ks.conn = conn
+
+	// 批量订阅
+	if err := ks.subscribeAll(); err != nil {
+		conn.Close()
+		return err
+	}
+
 	log.Printf("WebSocket已连接，订阅 %d 个交易对的15分钟K线", len(ks.symbols))
+	return nil
+}
+
+// subscribeAll 批量订阅所有交易对
+func (ks *KlineSubscriber) subscribeAll() error {
+	batchSize := 50
+	for i := 0; i < len(ks.symbols); i += batchSize {
+		end := i + batchSize
+		if end > len(ks.symbols) {
+			end = len(ks.symbols)
+		}
+
+		batch := ks.symbols[i:end]
+		params := make([]string, len(batch))
+		for j, symbol := range batch {
+			params[j] = fmt.Sprintf("%s@kline_15m", strings.ToLower(symbol))
+		}
+
+		req := map[string]interface{}{
+			"method": "SUBSCRIBE",
+			"params": params,
+			"id":     time.Now().UnixNano(),
+		}
+
+		if err := ks.conn.WriteJSON(req); err != nil {
+			return fmt.Errorf("发送订阅请求失败: %w", err)
+		}
+
+		// 短暂延迟避免请求过快
+		time.Sleep(100 * time.Millisecond)
+	}
 	return nil
 }
 

@@ -48,9 +48,15 @@ type OIFetcher struct {
 
 // NewOIFetcher 创建持仓量获取器
 func NewOIFetcher(oiDataCh chan models.OIData, interval time.Duration) *OIFetcher {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.MaxIdleConns = 100
+	t.MaxIdleConnsPerHost = 50
+	t.IdleConnTimeout = 90 * time.Second
+
 	return &OIFetcher{
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: t,
 		},
 		oiDataCh:    oiDataCh,
 		interval:    interval,
