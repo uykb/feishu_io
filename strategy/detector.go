@@ -3,6 +3,7 @@ package strategy
 import (
 	"binance-monitor/models"
 	"log"
+	"math"
 	"sync"
 	"time"
 )
