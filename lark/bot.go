@@ -19,11 +19,11 @@ type Bot struct {
 }
 
 // NewBot 创建飞书机器人
-func NewBot(webhookURL string) *Bot {
+func NewBot(webhookURL string, timeout time.Duration) *Bot {
 	return &Bot{
 		webhookURL: webhookURL,
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: timeout,
 		},
 	}
 }

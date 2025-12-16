@@ -32,7 +32,7 @@ func main() {
 	signalCh := make(chan models.Signal, 100)
 
 	// 初始化OI获取器并获取交易对列表
-	oiFetcher := binance.NewOIFetcher(oiDataCh, time.Duration(cfg.CheckInterval)*time.Second)
+	oiFetcher := binance.NewOIFetcher(oiDataCh, time.Duration(cfg.MinCheckInterval)*time.Second, time.Duration(cfg.CheckInterval)*time.Second, cfg.Socks5Proxy)
 	log.Println("正在获取USDT永续合约交易对列表...")
 	symbols, err := oiFetcher.FetchSymbols()
 	if err != nil {
@@ -40,17 +40,30 @@ func main() {
 	}
 
 	// 初始化WebSocket订阅器
-	klineSubscriber := binance.NewKlineSubscriber(symbols, klineDataCh)
+	klineSubscriber := binance.NewKlineSubscriber(symbols, klineDataCh, cfg.Socks5Proxy)
 	if err := klineSubscriber.Start(); err != nil {
 		log.Fatalf("启动WebSocket订阅失败: %v", err)
 	}
 	defer klineSubscriber.Close()
 
 	// 初始化信号检测器
-	detector := strategy.NewSignalDetector(cfg.OIThreshold, cfg.PriceThreshold, cfg.ADXThreshold, signalCh)
+	detectorConfig := strategy.DetectorConfig{
+		OIThreshold:             cfg.OIThreshold,
+		PriceThreshold:          cfg.PriceThreshold,
+		ADXThreshold:            cfg.ADXThreshold,
+		ATRPeriod:               cfg.ATRPeriod,
+		ADXPeriod:               cfg.ADXPeriod,
+		StopLossMultiplier:      cfg.StopLossMultiplier,
+		RiskAmount:              cfg.RiskAmount,
+		BullishBreakoutWeight:   cfg.BullishBreakoutWeight,
+		BearishMomentumWeight:   cfg.BearishMomentumWeight,
+		PossibleFakeoutWeight:   cfg.PossibleFakeoutWeight,
+		MarketContractionWeight: cfg.MarketContractionWeight,
+	}
+	detector := strategy.NewSignalDetector(detectorConfig, signalCh)
 
 	// 初始化飞书机器人
-	bot := lark.NewBot(cfg.LarkWebhookURL)
+	bot := lark.NewBot(cfg.LarkWebhookURL, time.Duration(cfg.LarkTimeout)*time.Second)
 
 	// 启动各个协程
 	log.Println("启动数据处理协程...")

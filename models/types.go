@@ -45,6 +45,7 @@ type Signal struct {
 	Quantity     float64 // 建议仓位大小
 	AlertsIn24h  int     // 24小时内提醒次数
 	ADX          float64 // ADX值
+	StrengthScore float64 // 信号强度评分
 }
 
 // SignalType 信号类型

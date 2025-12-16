@@ -20,36 +20,43 @@ type OIStorage struct {
 	ois map[string]float64 // symbol -> open interest
 }
 
+// DetectorConfig 信号检测器配置
+type DetectorConfig struct {
+	OIThreshold             float64
+	PriceThreshold          float64
+	ADXThreshold            float64
+	ATRPeriod               int
+	ADXPeriod               int
+	StopLossMultiplier      float64
+	RiskAmount              float64
+	BullishBreakoutWeight   float64
+	BearishMomentumWeight   float64
+	PossibleFakeoutWeight   float64
+	MarketContractionWeight float64
+}
+
 // SignalDetector 信号检测器
 type SignalDetector struct {
+	config         DetectorConfig
 	klineHistory   *KlineHistory
 	oiStorage      *OIStorage
-	oiThreshold    float64
-	priceThreshold float64
 	signalCh       chan models.Signal
-	atrPeriod      int
-	adxPeriod      int
-	adxThreshold   float64
 	alertTimestamps map[string][]time.Time
 	alertMu         sync.Mutex
 }
 
 // NewSignalDetector 创建信号检测器
-func NewSignalDetector(oiThreshold, priceThreshold, adxThreshold float64, signalCh chan models.Signal) *SignalDetector {
+func NewSignalDetector(config DetectorConfig, signalCh chan models.Signal) *SignalDetector {
 	return &SignalDetector{
+		config: config,
 		klineHistory: &KlineHistory{
 			klines:    make(map[string][]models.KlineData),
-			maxLength: 30, // Increase for ADX calculation
+			maxLength: config.ADXPeriod * 2 + 5, // 动态调整历史长度
 		},
 		oiStorage: &OIStorage{
 			ois: make(map[string]float64),
 		},
-		oiThreshold:    oiThreshold,
-		priceThreshold: priceThreshold,
 		signalCh:       signalCh,
-		atrPeriod:      14,
-		adxPeriod:      14,
-		adxThreshold:   adxThreshold,
 		alertTimestamps: make(map[string][]time.Time),
 	}
 }
@@ -116,46 +123,73 @@ func (sd *SignalDetector) checkSignal(currentKline models.KlineData, previousPri
 	// 检查四种信号类型
 	var signalType models.SignalType
 	var matched bool
+	var strengthScore float64 // 新增信号强度评分
 
-	if oiChange > sd.oiThreshold && priceChange > sd.priceThreshold {
+	// 获取历史K线数据用于ADX计算
+	sd.klineHistory.mu.RLock()
+	klineHistory, historyExists := sd.klineHistory.klines[currentKline.Symbol]
+	sd.klineHistory.mu.RUnlock()
+
+	var atr, stopLoss, quantity, adx float64
+	var alertCount int
+
+	if historyExists {
+		adx = CalculateADX(klineHistory, sd.config.ADXPeriod)
+	}
+
+	// 信号检测逻辑
+	if oiChange > sd.config.OIThreshold && priceChange > sd.config.PriceThreshold {
 		// OI↑ + Price↑ = 看涨突破
 		signalType = models.BullishBreakout
 		matched = true
-	} else if oiChange > sd.oiThreshold && priceChange < -sd.priceThreshold {
+		strengthScore = (oiChange/sd.config.OIThreshold) * (priceChange/sd.config.PriceThreshold) * sd.config.BullishBreakoutWeight
+	} else if oiChange > sd.config.OIThreshold && priceChange < -sd.config.PriceThreshold {
 		// OI↑ + Price↓ = 看跌动量
 		signalType = models.BearishMomentum
 		matched = true
+		strengthScore = (oiChange/sd.config.OIThreshold) * (math.Abs(priceChange)/sd.config.PriceThreshold) * sd.config.BearishMomentumWeight
+	} else if oiChange < -sd.config.OIThreshold && priceChange > sd.config.PriceThreshold {
+		// OI↓ + Price↑ = 可能的假突破
+		signalType = models.PossibleFakeout
+		matched = true
+		strengthScore = (math.Abs(oiChange)/sd.config.OIThreshold) * (priceChange/sd.config.PriceThreshold) * sd.config.PossibleFakeoutWeight
+	} else if oiChange < -sd.config.OIThreshold && priceChange < -sd.config.PriceThreshold {
+		// OI↓ + Price↓ = 市场收缩
+		signalType = models.MarketContraction
+		matched = true
+		strengthScore = (math.Abs(oiChange)/sd.config.OIThreshold) * (math.Abs(priceChange)/sd.config.PriceThreshold) * sd.config.MarketContractionWeight
 	}
 
 	if matched {
+		// 检查ADX，ADX低于阈值则过滤信号
+		if adx < sd.config.ADXThreshold {
+			log.Printf("过滤信号: %s %s ADX (%.2f) < 阈值 (%.2f)", currentKline.Symbol, signalType.String(), adx, sd.config.ADXThreshold)
+			return
+		}
+		// 根据ADX增强信号强度评分 (如果ADX高于阈值，则视为趋势更强)
+		if adx > sd.config.ADXThreshold && strengthScore > 0 {
+			strengthScore *= (1 + (adx-sd.config.ADXThreshold)/sd.config.ADXThreshold)
+		}
+		// 确保strengthScore不为负且有下限
+		if strengthScore < 0 { strengthScore = 0 }
+
+
 		// -- ATR, Stop-Loss, and Quantity Calculation --
-		sd.klineHistory.mu.RLock()
-		klineHistory, historyExists := sd.klineHistory.klines[currentKline.Symbol]
-		sd.klineHistory.mu.RUnlock()
-
-		var atr, stopLoss, quantity, adx float64
-		var alertCount int
 		if historyExists {
-			adx = CalculateADX(klineHistory, sd.adxPeriod)
-			if adx < sd.adxThreshold {
-				log.Printf("过滤信号: %s ADX (%.2f) < 阈值 (%.2f)", currentKline.Symbol, adx, sd.adxThreshold)
-				return
-			}
-
-			atr = CalculateATR(klineHistory, sd.atrPeriod)
+			atr = CalculateATR(klineHistory, sd.config.ATRPeriod)
 
 			// -- 24小时内信号计数 --
 			alertCount = sd.getAlertCount(currentKline.Symbol)
 
 			if atr > 0 {
-				stopLossDistance := 1.5 * atr
+				stopLossDistance := sd.config.StopLossMultiplier * atr
 				// 根据信号类型计算止损和仓位
 				if signalType == models.BullishBreakout || signalType == models.PossibleFakeout { // 看涨/做多
 					stopLoss = currentPrice - stopLossDistance
-					quantity = 1 / stopLossDistance // 固定1 USDT风险
+					quantity = sd.config.RiskAmount / stopLossDistance // 固定风险
 				} else { // 看跌/做空
 					stopLoss = currentPrice + stopLossDistance
-					quantity = 1 / stopLossDistance // 固定1 USDT风险
+					quantity = sd.config.RiskAmount / stopLossDistance // 固定风险
 				}
 			}
 		}
@@ -173,12 +207,13 @@ func (sd *SignalDetector) checkSignal(currentKline models.KlineData, previousPri
 			Quantity:     quantity,
 			AlertsIn24h:  alertCount,
 			ADX:          adx,
+			StrengthScore: strengthScore,
 		}
 
 		select {
 		case sd.signalCh <- signal:
-			log.Printf("触发信号: %s - %s (OI: %.2f%%, P: %.2f%%, ATR: %.4f, SL: %.4f, Qty: %.2f)",
-				currentKline.Symbol, signalType.String(), oiChange, priceChange, atr, stopLoss, quantity)
+			log.Printf("触发信号: %s - %s (OI: %.2f%%, P: %.2f%%, ATR: %.4f, SL: %.4f, Qty: %.2f, Strength: %.2f)",
+				currentKline.Symbol, signalType.String(), oiChange, priceChange, atr, stopLoss, quantity, strengthScore)
 		default:
 			log.Printf("信号通道已满，丢弃 %s 的信号", currentKline.Symbol)
 		}

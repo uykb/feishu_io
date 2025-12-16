@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -45,13 +47,15 @@ type KlineSubscriber struct {
 	conn         *websocket.Conn
 	mu           sync.Mutex
 	reconnecting bool
+	proxyURL     string
 }
 
 // NewKlineSubscriber 创建K线订阅器
-func NewKlineSubscriber(symbols []string, klineDataCh chan models.KlineData) *KlineSubscriber {
+func NewKlineSubscriber(symbols []string, klineDataCh chan models.KlineData, proxyURL string) *KlineSubscriber {
 	return &KlineSubscriber{
 		symbols:     symbols,
 		klineDataCh: klineDataCh,
+		proxyURL:    proxyURL,
 	}
 }
 
@@ -72,8 +76,23 @@ func (ks *KlineSubscriber) connect() error {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 
+	// 配置代理
+	dialer := websocket.DefaultDialer
+	if ks.proxyURL != "" {
+		parsedURL, err := url.Parse(ks.proxyURL)
+		if err != nil {
+			log.Printf("Warning: Invalid SOCKS5 proxy URL: %v", err)
+		} else {
+			dialer = &websocket.Dialer{
+				Proxy:            http.ProxyURL(parsedURL),
+				HandshakeTimeout: 45 * time.Second,
+			}
+			log.Printf("Enabled proxy for WebSocket: %s", ks.proxyURL)
+		}
+	}
+
 	// 直接连接到 stream 端点
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, _, err := dialer.Dial(wsURL, nil)
 	if err != nil {
 		return fmt.Errorf("WebSocket连接失败: %w", err)
 	}
@@ -198,13 +217,23 @@ func (ks *KlineSubscriber) reconnect() {
 	}
 	ks.mu.Unlock()
 
-	log.Println("WebSocket连接断开，5秒后尝试重连...")
-	time.Sleep(5 * time.Second)
+	backoff := 1 * time.Second
+	maxBackoff := 60 * time.Second
 
+	log.Println("WebSocket连接断开，准备重连...")
+	
 	for {
+		log.Printf("尝试重连... (等待 %v)", backoff)
+		time.Sleep(backoff)
+
 		if err := ks.connect(); err != nil {
-			log.Printf("重连失败: %v，10秒后重试", err)
-			time.Sleep(10 * time.Second)
+			log.Printf("重连失败: %v", err)
+			
+			// 指数退避
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
 			continue
 		}
 

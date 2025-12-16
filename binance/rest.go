@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"sync"
@@ -38,30 +40,46 @@ type OpenInterestResponse struct {
 
 // OIFetcher 持仓量获取器
 type OIFetcher struct {
-	client      *http.Client
-	symbols     []string
-	oiDataCh    chan models.OIData
-	interval    time.Duration
-	concurrency int
-	mu          sync.RWMutex
+	client          *http.Client
+	symbols         []string
+	oiDataCh        chan models.OIData
+	minInterval     time.Duration
+	maxInterval     time.Duration
+	currentInterval time.Duration
+	concurrency     int
+	mu              sync.RWMutex
+	lastOIData      map[string]models.OIData
 }
 
 // NewOIFetcher 创建持仓量获取器
-func NewOIFetcher(oiDataCh chan models.OIData, interval time.Duration) *OIFetcher {
+func NewOIFetcher(oiDataCh chan models.OIData, minInterval, maxInterval time.Duration, proxyURL string) *OIFetcher {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.MaxIdleConns = 100
 	t.MaxIdleConnsPerHost = 50
 	t.IdleConnTimeout = 90 * time.Second
+
+	if proxyURL != "" {
+		parsedURL, err := url.Parse(proxyURL)
+		if err != nil {
+			log.Printf("Warning: Invalid SOCKS5 proxy URL: %v", err)
+		} else {
+			t.Proxy = http.ProxyURL(parsedURL)
+			log.Printf("Enabled proxy for REST API: %s", proxyURL)
+		}
+	}
 
 	return &OIFetcher{
 		client: &http.Client{
 			Timeout:   30 * time.Second,
 			Transport: t,
 		},
-		oiDataCh:    oiDataCh,
-		interval:    interval,
-		concurrency: 20, // 并发协程数
-		mu:          sync.RWMutex{},
+		oiDataCh:        oiDataCh,
+		minInterval:     minInterval,
+		maxInterval:     maxInterval,
+		currentInterval: maxInterval,
+		concurrency:     20, // 并发协程数
+		mu:              sync.RWMutex{},
+		lastOIData:      make(map[string]models.OIData),
 	}
 }
 
@@ -104,9 +122,6 @@ func (of *OIFetcher) FetchSymbols() ([]string, error) {
 
 // Start 启动持仓量轮询
 func (of *OIFetcher) Start() {
-	oiTicker := time.NewTicker(of.interval)
-	defer oiTicker.Stop()
-
 	// 每小时更新一次交易对列表
 	symbolUpdateTicker := time.NewTicker(1 * time.Hour)
 	defer symbolUpdateTicker.Stop()
@@ -114,10 +129,23 @@ func (of *OIFetcher) Start() {
 	// 立即执行一次
 	of.fetchAllOI()
 
+	// 初始定时器
+	timer := time.NewTimer(of.currentInterval)
+	defer timer.Stop()
+
 	for {
 		select {
-		case <-oiTicker.C:
-			of.fetchAllOI()
+		case <-timer.C:
+			// 获取当前周期的最大波动率
+			maxVolatility := of.fetchAllOI()
+
+			// 根据波动率调整下一次的轮询间隔
+			of.adjustInterval(maxVolatility)
+			
+			// 重置定时器
+			timer.Reset(of.currentInterval)
+			// log.Printf("下次轮询间隔: %v (最大波动率: %.4f%%)", of.currentInterval, maxVolatility)
+
 		case <-symbolUpdateTicker.C:
 			log.Println("定时任务: 正在更新交易对列表...")
 			if _, err := of.FetchSymbols(); err != nil {
@@ -127,8 +155,37 @@ func (of *OIFetcher) Start() {
 	}
 }
 
-// fetchAllOI 并发获取所有交易对的持仓量
-func (of *OIFetcher) fetchAllOI() {
+// adjustInterval 根据波动率调整轮询间隔
+func (of *OIFetcher) adjustInterval(volatility float64) {
+	// 如果波动率超过0.5%，使用最小间隔
+	if volatility > 0.5 {
+		of.currentInterval = of.minInterval
+		return
+	}
+
+	// 否则线性增加间隔
+	// volatility 0% -> maxInterval
+	// volatility 0.5% -> minInterval
+	ratio := volatility / 0.5
+	if ratio > 1 {
+		ratio = 1
+	}
+
+	// 线性插值
+	intervalDiff := float64(of.maxInterval - of.minInterval)
+	newInterval := float64(of.maxInterval) - (intervalDiff * ratio)
+	
+	of.currentInterval = time.Duration(newInterval)
+	if of.currentInterval < of.minInterval {
+		of.currentInterval = of.minInterval
+	}
+	if of.currentInterval > of.maxInterval {
+		of.currentInterval = of.maxInterval
+	}
+}
+
+// fetchAllOI 并发获取所有交易对的持仓量，返回最大波动率
+func (of *OIFetcher) fetchAllOI() float64 {
 	of.mu.RLock()
 	symbolsToFetch := make([]string, len(of.symbols))
 	copy(symbolsToFetch, of.symbols)
@@ -136,6 +193,9 @@ func (of *OIFetcher) fetchAllOI() {
 
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, of.concurrency)
+	
+	// 用于收集每个交易对的波动率
+	volatilityCh := make(chan float64, len(symbolsToFetch))
 
 	for _, symbol := range symbolsToFetch {
 		wg.Add(1)
@@ -151,15 +211,49 @@ func (of *OIFetcher) fetchAllOI() {
 				return
 			}
 
-			select {
-			case of.oiDataCh <- oiData:
-			default:
-				log.Printf("OI数据通道已满，丢弃 %s 的数据", sym)
+			// 数据去重与波动率计算
+			of.mu.Lock()
+			lastData, exists := of.lastOIData[sym]
+			of.lastOIData[sym] = oiData
+			of.mu.Unlock()
+
+			var changePercent float64
+			if exists && lastData.OpenInterest > 0 {
+				changePercent = math.Abs((oiData.OpenInterest - lastData.OpenInterest) / lastData.OpenInterest * 100)
+				
+				// 只有当数据有变化或者是新数据时才发送
+				if changePercent > 0.0001 || oiData.Timestamp.After(lastData.Timestamp) {
+					select {
+					case of.oiDataCh <- oiData:
+					default:
+						// log.Printf("OI数据通道已满，丢弃 %s 的数据", sym)
+					}
+				}
+			} else {
+				// 第一次获取，直接发送
+				select {
+				case of.oiDataCh <- oiData:
+				default:
+				}
 			}
+
+			volatilityCh <- changePercent
+
 		}(symbol)
 	}
 
 	wg.Wait()
+	close(volatilityCh)
+
+	// 计算最大波动率
+	var maxVolatility float64
+	for v := range volatilityCh {
+		if v > maxVolatility {
+			maxVolatility = v
+		}
+	}
+	
+	return maxVolatility
 }
 
 // fetchOI 获取单个交易对的持仓量
