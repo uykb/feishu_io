@@ -115,10 +115,10 @@ docker-compose ps
 
 # 应该看到类似输出：
 # NAME                  STATUS              PORTS
-# binance-monitor       Up 10 seconds
+# copycat-bot           Up 10 seconds
 
 # 查看启动日志
-docker-compose logs binance-monitor
+docker-compose logs copycat-bot
 
 # 应该看到类似输出：
 # === 币安加密货币市场监控程序启动 ===
@@ -148,10 +148,10 @@ sudo systemctl enable docker
 
 # 3. 上传项目文件
 # 在本地执行：
-scp -r . user@your-server-ip:/opt/binance-monitor
+scp -r . user@your-server-ip:/opt/copycat-bot
 
 # 4. 在服务器上部署
-cd /opt/binance-monitor
+cd /opt/copycat-bot
 cp .env.docker.example .env.docker
 nano .env.docker  # 填写配置
 make deploy
@@ -173,7 +173,7 @@ sudo usermod -a -G docker ec2-user
 
 ```bash
 # 使用 Container-Optimized OS
-gcloud compute instances create binance-monitor \
+gcloud compute instances create copycat-bot \
   --image-family cos-stable \
   --image-project cos-cloud \
   --zone us-central1-a
@@ -190,30 +190,30 @@ gcloud compute instances create binance-monitor \
 docker login
 
 # 2. 构建镜像
-docker build -t yourname/binance-monitor:latest .
+docker build -t yourname/copycat-bot:latest .
 
 # 3. 推送镜像
-docker push yourname/binance-monitor:latest
+docker push yourname/copycat-bot:latest
 ```
 
 ### 从 Docker Hub 拉取部署
 
 ```bash
 # 拉取镜像
-docker pull yourname/binance-monitor:latest
+docker pull yourname/copycat-bot:latest
 
 # 运行容器
 docker run -d \
-  --name binance-monitor \
+  --name copycat-bot \
   --restart unless-stopped \
   -e LARK_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/xxxxx" \
   -e OI_THRESHOLD=5.0 \
   -e PRICE_THRESHOLD=2.0 \
   -e CHECK_INTERVAL=60 \
-  yourname/binance-monitor:latest
+  yourname/copycat-bot:latest
 
 # 查看日志
-docker logs -f binance-monitor
+docker logs -f copycat-bot
 ```
 
 ## 常见问题
@@ -222,7 +222,7 @@ docker logs -f binance-monitor
 
 **检查日志：**
 ```bash
-docker-compose logs binance-monitor
+docker-compose logs copycat-bot
 ```
 
 **常见原因：**
@@ -253,7 +253,7 @@ curl -X POST "你的Webhook_URL" \
 **检查网络：**
 ```bash
 # 进入容器测试
-docker exec -it binance-monitor sh
+docker exec -it copycat-bot sh
 
 # 测试币安API连接
 wget -O- https://fapi.binance.com/fapi/v1/ping
@@ -277,7 +277,7 @@ deploy:
 
 ```bash
 # 进入容器
-docker exec -it binance-monitor sh
+docker exec -it copycat-bot sh
 
 # 查看进程
 ps aux
@@ -336,7 +336,7 @@ make deploy
 
 ```bash
 # 从 Docker Hub 更新
-docker pull yourname/binance-monitor:latest
+docker pull yourname/copycat-bot:latest
 docker-compose up -d
 ```
 
@@ -406,7 +406,7 @@ oiDataCh := make(chan models.OIData, 1000)
 
 ```bash
 # 使用 docker stats
-docker stats binance-monitor
+docker stats copycat-bot
 
 # 输出示例：
 # CONTAINER ID   CPU %   MEM USAGE / LIMIT   MEM %   NET I/O
@@ -426,7 +426,7 @@ Dockerfile 已包含健康检查：
 
 ```dockerfile
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD pgrep binance-monitor || exit 1
+  CMD pgrep copycat-bot || exit 1
 ```
 
 ## 卸载
@@ -438,11 +438,11 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 docker-compose down
 
 # 删除镜像
-docker rmi binance-monitor
+docker rmi copycat-bot
 
 # 删除项目文件
 cd ..
-rm -rf binance-monitor
+rm -rf copycat-bot
 ```
 
 ### 保留配置卸载
