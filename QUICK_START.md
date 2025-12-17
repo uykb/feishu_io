@@ -1,6 +1,6 @@
 # 快速开始指南
 
-## 使用 GitHub Container Registry 镜像部署（最简单）
+## 使用 Docker 镜像部署（最简单）
 
 ### 1. 获取飞书 Webhook
 
@@ -16,7 +16,7 @@ docker run -d \
   --name copycat-bot \
   --restart unless-stopped \
   -e LARK_WEBHOOK_URL="你的飞书Webhook" \
-  ghcr.io/uykb/copycat-bot:main
+  copycat-bot:latest
 ```
 
 ### 3. 查看日志
@@ -50,7 +50,7 @@ version: '3.8'
 
 services:
   copycat-bot:
-    image: ghcr.io/uykb/copycat-bot:main
+    image: copycat-bot:latest
     container_name: copycat-bot
     restart: unless-stopped
     environment:
@@ -94,7 +94,7 @@ docker run -d \
   -e OI_THRESHOLD=8.0 \
   -e PRICE_THRESHOLD=3.0 \
   -e CHECK_INTERVAL=120 \
-  ghcr.io/uykb/copycat-bot:main
+  copycat-bot:latest
 ```
 
 ## 故障排查
@@ -126,14 +126,14 @@ curl -X POST "你的Webhook" \
 docker rm -f copycat-bot
 
 # 拉取最新镜像
-docker pull ghcr.io/uykb/copycat-bot:main
+docker pull copycat-bot:latest
 
 # 重新运行
 docker run -d \
   --name copycat-bot \
   --restart unless-stopped \
   -e LARK_WEBHOOK_URL="你的Webhook" \
-  ghcr.io/uykb/copycat-bot:main
+  copycat-bot:latest
 ```
 
 ## 更多信息

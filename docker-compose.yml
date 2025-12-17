@@ -1,11 +1,12 @@
 version: '3.8'
 
 services:
-  binance-monitor:
+  copycat-bot:
+    image: copycat-bot:latest
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: binance-monitor
+    container_name: copycat-bot
     restart: unless-stopped
     
     # 环境变量配置（敏感信息）

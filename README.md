@@ -89,7 +89,7 @@
 
 ## 部署方式
 
-### 🚀 方式一：从 GitHub Container Registry 拉取（推荐）
+### 🚀 方式一：使用 Docker 镜像部署（推荐）
 
 这是最简单快捷的部署方式，无需克隆代码，直接拉取预构建镜像。
 
@@ -97,7 +97,7 @@
 
 ```bash
 # 拉取最新镜像
-docker pull ghcr.io/uykb/copycat-bot:main
+docker pull copycat-bot:latest
 
 # 运行容器
 docker run -d \
@@ -107,7 +107,7 @@ docker run -d \
   -e OI_THRESHOLD=5.0 \
   -e PRICE_THRESHOLD=2.0 \
   -e CHECK_INTERVAL=60 \
-  ghcr.io/uykb/copycat-bot:main
+  copycat-bot:latest
 
 # 查看日志
 docker logs -f copycat-bot
@@ -122,7 +122,7 @@ version: '3.8'
 
 services:
   copycat-bot:
-    image: ghcr.io/uykb/copycat-bot:main
+    image: copycat-bot:latest
     container_name: copycat-bot
     restart: unless-stopped
     environment:
@@ -157,10 +157,8 @@ docker-compose up -d
 
 | 标签 | 说明 | 使用场景 |
 |------|------|----------|
-| `main` | 主分支最新版本 | 生产环境（推荐） |
-| `latest` | 同 main | 生产环境 |
+| `latest` | 最新版本 | 生产环境（推荐） |
 | `v1.0.0` | 特定版本号 | 稳定版本 |
-| `sha-xxxxxx` | 特定提交 | 特定版本锁定 |
 
 ### 方式二：Docker Compose 本地构建
 
@@ -242,7 +240,7 @@ chmod +x deploy.sh
 docker-compose ps
 
 # 查看实时日志
-docker-compose logs -f binance-monitor
+docker-compose logs -f copycat-bot
 ```
 
 ### 方式二：云平台 Docker 部署
@@ -266,17 +264,17 @@ docker push yourname/binance-monitor:latest
 
 ```bash
 # 拉取镜像
-docker pull yourname/binance-monitor:latest
+docker pull copycat-bot:latest
 
 # 运行容器（使用环境变量）
 docker run -d \
-  --name binance-monitor \
+  --name copycat-bot \
   --restart unless-stopped \
   -e LARK_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/xxxxx" \
   -e OI_THRESHOLD=5.0 \
   -e PRICE_THRESHOLD=2.0 \
   -e CHECK_INTERVAL=60 \
-  yourname/binance-monitor:latest
+  copycat-bot:latest
 ```
 
 #### 腾讯云 / 阿里云 / AWS 等云平台
@@ -466,7 +464,8 @@ make clean     # 清理所有容器和镜像
 
 ```bash
 # 查看详细日志
-docker-compose logs binance-monitor
+docker-compose logs copycat-bot
+
 
 # 检查环境变量是否正确
 docker-compose config
@@ -491,7 +490,7 @@ docker-compose config
 
 ```bash
 # 进入容器
-docker exec -it binance-monitor sh
+docker exec -it copycat-bot sh
 
 # 检查进程
 ps aux
@@ -533,12 +532,12 @@ go run main.go 2>&1 | tee monitor.log
 
 ```bash
 # 构建开发镜像
-docker build -t binance-monitor:dev .
+docker build -t copycat-bot:dev .
 
 # 运行并查看日志
 docker run --rm \
   -e LARK_WEBHOOK_URL="your_webhook" \
-  binance-monitor:dev
+  copycat-bot:dev
 ```
 
 ## License
