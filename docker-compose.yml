@@ -18,6 +18,10 @@ services:
       - OI_THRESHOLD=${OI_THRESHOLD:-5.0}
       - PRICE_THRESHOLD=${PRICE_THRESHOLD:-2.0}
       - CHECK_INTERVAL=${CHECK_INTERVAL:-60}
+      - MIN_CHECK_INTERVAL=${MIN_CHECK_INTERVAL:-10}
+      
+      # 代理配置（可选）
+      - SOCKS5_PROXY=${SOCKS5_PROXY}
       
       # 时区设置
       - TZ=Asia/Shanghai

@@ -240,6 +240,10 @@ func (of *OIFetcher) fetchAllOI() float64 {
 			volatilityCh <- changePercent
 
 		}(symbol)
+
+		// 速率限制: 35ms延迟 -> ~28 req/s -> ~1680 req/min
+		// Binance IP限制为 2400 req/min，留出缓冲空间
+		time.Sleep(35 * time.Millisecond)
 	}
 
 	wg.Wait()
