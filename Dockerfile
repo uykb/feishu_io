@@ -20,7 +20,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o binance-monitor .
 
 # 多阶段构建：第二阶段 - 运行时
-FROM alpine:3.18
+FROM alpine:3.23
 
 # 安装 CA 证书和时区数据
 RUN apk --no-cache add ca-certificates tzdata
