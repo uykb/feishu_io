@@ -190,6 +190,26 @@ func (b *Bot) sendMessage(jsonData []byte) error {
 }
 
 
+// SendHypeSignal 发送HYPE专属信号
+func (b *Bot) SendHypeSignal(signal models.HypeSignal) error {
+	cardMessage := FormatHypeCard(signal)
+	jsonData, err := json.Marshal(cardMessage)
+	if err != nil {
+		return fmt.Errorf("序列化HYPE消息卡片失败: %w", err)
+	}
+	return b.sendMessage(jsonData)
+}
+
+// ProcessHypeSignals 处理HYPE信号通道
+func (b *Bot) ProcessHypeSignals(signalCh <-chan models.HypeSignal) {
+	for signal := range signalCh {
+		if err := b.SendHypeSignal(signal); err != nil {
+			log.Printf("发送HYPE飞书消息失败: %v", err)
+		}
+		time.Sleep(1 * time.Second)
+	}
+}
+
 // ProcessSignals 处理信号通道
 func (b *Bot) ProcessSignals(signalCh <-chan models.Signal) {
 	for signal := range signalCh {

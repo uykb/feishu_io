@@ -27,6 +27,17 @@ type Config struct {
 	BearishMomentumWeight float64
 	PossibleFakeoutWeight float64
 	MarketContractionWeight float64
+	// HYPE Strategy Configuration
+	HypeSymbol            string
+	HypeOIStopThreshold   float64
+	HypeFRExtremeThreshold float64
+	HypeFRRecoveryThreshold float64
+	HypeHigherLowPct      float64
+	HypeSqueezePricePct   float64
+	HypeSqueezeOIDeclinePct float64
+	HypeCooldownMinutes   int
+	HypeLookbackKlines    int
+	HypeFundingInterval   int
 }
 
 func Load() *Config {
@@ -49,6 +60,15 @@ func Load() *Config {
 	bearishMomentumWeight, _ := strconv.ParseFloat(getEnv("BEARISH_MOMENTUM_WEIGHT", "1.0"), 64)
 	possibleFakeoutWeight, _ := strconv.ParseFloat(getEnv("POSSIBLE_FAKEOUT_WEIGHT", "1.0"), 64)
 	marketContractionWeight, _ := strconv.ParseFloat(getEnv("MARKET_CONTRACTION_WEIGHT", "1.0"), 64)
+	hypeOIStopThreshold, _ := strconv.ParseFloat(getEnv("HYPE_OI_STOP_THRESHOLD", "-0.15"), 64)
+	hypeFRExtremeThreshold, _ := strconv.ParseFloat(getEnv("HYPE_FR_EXTREME_THRESHOLD", "-0.0005"), 64)
+	hypeFRRecoveryThreshold, _ := strconv.ParseFloat(getEnv("HYPE_FR_RECOVERY_THRESHOLD", "0.3"), 64)
+	hypeHigherLowPct, _ := strconv.ParseFloat(getEnv("HYPE_HIGHER_LOW_PCT", "0.3"), 64)
+	hypeSqueezePricePct, _ := strconv.ParseFloat(getEnv("HYPE_SQUEEZE_PRICE_PCT", "0.5"), 64)
+	hypeSqueezeOIDeclinePct, _ := strconv.ParseFloat(getEnv("HYPE_SQUEEZE_OI_DECLINE_PCT", "0.05"), 64)
+	hypeCooldownMinutes, _ := strconv.Atoi(getEnv("HYPE_COOLDOWN_MINUTES", "15"))
+	hypeLookbackKlines, _ := strconv.Atoi(getEnv("HYPE_LOOKBACK_KLINES", "12"))
+	hypeFundingInterval, _ := strconv.Atoi(getEnv("HYPE_FUNDING_INTERVAL", "30"))
 
 	return &Config{
 		LarkWebhookURL: getEnv("LARK_WEBHOOK_URL", ""),
@@ -67,6 +87,16 @@ func Load() *Config {
 		BearishMomentumWeight: bearishMomentumWeight,
 		PossibleFakeoutWeight: possibleFakeoutWeight,
 		MarketContractionWeight: marketContractionWeight,
+		HypeSymbol:            getEnv("HYPE_SYMBOL", "HYPEUSDT"),
+		HypeOIStopThreshold:   hypeOIStopThreshold,
+		HypeFRExtremeThreshold: hypeFRExtremeThreshold,
+		HypeFRRecoveryThreshold: hypeFRRecoveryThreshold,
+		HypeHigherLowPct:      hypeHigherLowPct,
+		HypeSqueezePricePct:   hypeSqueezePricePct,
+		HypeSqueezeOIDeclinePct: hypeSqueezeOIDeclinePct,
+		HypeCooldownMinutes:   hypeCooldownMinutes,
+		HypeLookbackKlines:    hypeLookbackKlines,
+		HypeFundingInterval:   hypeFundingInterval,
 	}
 }
 
