@@ -3,14 +3,15 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-1.21+-00ADD8)](https://go.dev/)
 
-一个基于Go语言的高性能加密货币市场监控系统，实时监控币安U本位永续合约市场，捕捉由持仓量(OI)、价格和资金费率共同驱动的交易信号。
+一个基于Go语言的高性能加密货币市场监控系统，支持 Binance 和 Hyperliquid 双数据源，实时监控市场数据，捕捉由持仓量(OI)、价格和资金费率共同驱动的交易信号。
 
 ## 功能特点
 
 - 🚀 **高并发架构**: 使用Goroutines和Channels实现高效并发处理
-- 📊 **实时数据**: WebSocket订阅所有交易对的15分钟K线数据
+- 📊 **实时数据**: WebSocket订阅K线数据（支持 Binance + Hyperliquid）
 - 🔄 **OI监控**: 并发REST API轮询获取持仓量数据
 - 💰 **资金费率**: 独立轮询获取资金费率，捕捉空头回补信号
+- 🔀 **双源并行**: 同时接入 Binance 和 Hyperliquid，信号标注来源
 - 🎯 **智能信号**: 四种通用市场信号 + HYPE专属五阶段策略
 - 📱 **即时通知**: 飞书机器人Webhook实时推送交易信号
 - 🐳 **Docker部署**: 容器化部署，支持云平台一键拉取
@@ -288,45 +289,70 @@ binance-monitor.exe      # Windows
 
 ## 运行模式
 
-### 全量模式（默认）
+### 模式一：全量模式（Binance）
 
 监控全部 524 个 USDT 永续合约交易对，同时叠加 HYPE 专属策略。
 
 ```env
 HYPE_ONLY_MODE=false
+HYPERLIQUID_ENABLED=false
 ```
 
 **资源消耗：**
 - WebSocket 订阅：524 个流
 - OI 轮询：524 个交易对（~1680 req/min）
 - 通用检测器：全部交易对
-- HYPE 检测器：HYPEUSDT
+- HYPE 检测器：HYPEUSDT (Binance)
 - 资金费率：HYPEUSDT
 
-### HYPE 专属模式
+### 模式二：HYPE 专属模式（Binance）
 
 仅监控 HYPEUSDT 一个交易对，大幅降低 API 压力。
 
 ```env
 HYPE_ONLY_MODE=true
+HYPERLIQUID_ENABLED=false
 ```
 
 **资源消耗：**
 - WebSocket 订阅：1 个流
 - OI 轮询：1 个交易对（~6 req/min）
 - 通用检测器：跳过
-- HYPE 检测器：HYPEUSDT
+- HYPE 检测器：HYPEUSDT (Binance)
 - 资金费率：HYPEUSDT
+
+### 模式三：双源并行模式（Binance + Hyperliquid）
+
+同时接入两个交易所数据源，HYPE 策略独立运行两套检测器，信号标注来源。
+
+```env
+HYPE_ONLY_MODE=false
+HYPERLIQUID_ENABLED=true
+```
+
+**资源消耗：**
+- Binance WebSocket：524 个流
+- Binance OI 轮询：524 个交易对（~1680 req/min）
+- Hyperliquid WebSocket：1 个流（HYPE）
+- Hyperliquid REST：1 次/10s（获取全部合约 OI+费率，weight=20）
+- HYPE 检测器：2 套（Binance + Hyperliquid 独立状态）
+- 资金费率：2 路（Binance + Hyperliquid）
+
+**双源优势：**
+- 对比两个交易所的 OI/费率差异，发现跨所信号
+- Hyperliquid 链上数据更透明，可作为 Binance 数据的验证
+- 信号标注来源，方便追踪哪个交易所先出现信号
 
 ### 模式对比
 
-| | 全量模式 | HYPE专属模式 |
-|:--|:--|:--|
-| 交易对获取 | 524个 | 跳过 |
-| WebSocket订阅 | 524个流 | 仅 HYPEUSDT |
-| OI轮询 | 524个并发 | 仅 HYPEUSDT |
-| 通用检测器 | 启动 | 跳过 |
-| API压力 | 高 | 极低 |
+| | 全量模式 | HYPE专属 | 双源并行 |
+|:--|:--|:--|:--|
+| Binance WS | 524流 | 1流 | 524流 |
+| Binance OI | 524个 | 1个 | 524个 |
+| Hyperliquid | ✗ | ✗ | ✓ (1个) |
+| 通用检测器 | ✓ | ✗ | ✓ |
+| HYPE检测器 | 1套(BN) | 1套(BN) | 2套(BN+HL) |
+| API压力 | 高 | 极低 | 高+低 |
 
 ## 消息示例
 
@@ -348,10 +374,13 @@ ADX(14): 28.50
 
 ### HYPE专属信号
 
+**Binance 数据源：**
+
 ```
-🔍 HYPEUSDT 底部吸筹
+🔍 HYPEUSDT (Binance) 底部吸筹
 
 时间: 05-18 10:34:00    阶段: 底部吸筹
+🔵 来源: Binance
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 价格创新低但OI止跌，资金费率极负，空头拥挤
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -361,6 +390,26 @@ OI: 22330000    OI趋势: 止跌/微增 (-0.09%)
 💰 资金费率: -0.00100%    状态: 极度拥挤
 🔄 费率变化: 0.0%
 📊 ADX(14): 22.50
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 建议: 观望，等待Higher Low确认
+```
+
+**Hyperliquid 数据源：**
+
+```
+🔍 HYPEUSDT (Hyperliquid) 底部吸筹
+
+时间: 05-18 10:34:00    阶段: 底部吸筹
+🟣 来源: Hyperliquid
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+价格创新低但OI止跌，资金费率极负，空头拥挤
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+价格: $41.35    最低价: $41.35
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OI: 1234567    OI趋势: 止跌/微增 (-0.08%)
+💰 资金费率: -0.00012    状态: 极度拥挤
+🔄 费率变化: 0.0%
+📊 ADX(14): 21.80
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 建议: 观望，等待Higher Low确认
 ```
@@ -399,15 +448,18 @@ binance-monitor/
 │   └── config.go              # 配置加载
 ├── models/
 │   ├── types.go               # 通用数据模型
-│   └── hype_types.go          # HYPE专用数据模型
+│   ├── hype_types.go          # HYPE专用数据模型
+│   └── exchange.go            # 数据源枚举(Binance/Hyperliquid)
 ├── binance/
-│   ├── websocket.go           # WebSocket客户端
-│   ├── rest.go                # REST API客户端(OI)
-│   └── funding.go             # REST API客户端(资金费率)
+│   ├── websocket.go           # Binance WebSocket客户端
+│   ├── rest.go                # Binance REST API客户端(OI)
+│   ├── funding.go             # Binance REST API客户端(资金费率)
+│   ├── hyperliquid_ws.go      # Hyperliquid WebSocket客户端
+│   └── hyperliquid_rest.go    # Hyperliquid REST API客户端(OI+费率)
 ├── strategy/
 │   ├── detector.go            # 通用信号检测器
 │   ├── indicators.go          # 技术指标(ATR/ADX)
-│   ├── hype_detector.go       # HYPE五阶段检测器
+│   ├── hype_detector.go       # HYPE五阶段检测器(双源适配)
 │   └── hype_state.go          # HYPE状态追踪
 └── lark/
     ├── bot.go                 # 飞书机器人(通用)

@@ -5,6 +5,7 @@ import "time"
 // FundingRateData 资金费率数据
 type FundingRateData struct {
 	Symbol      string
+	Source      DataSource
 	FundingRate float64
 	FundingTime time.Time
 	Timestamp   time.Time
@@ -75,6 +76,7 @@ func (st HypeSignalType) HeaderTemplate() string {
 // HypeSignal HYPE专属交易信号
 type HypeSignal struct {
 	Symbol      string
+	Source      DataSource
 	SignalType  HypeSignalType
 	Price       float64
 	PriceChange float64

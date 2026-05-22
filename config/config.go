@@ -39,6 +39,15 @@ type Config struct {
 	HypeCooldownMinutes   int
 	HypeLookbackKlines    int
 	HypeFundingInterval   int
+	// Hyperliquid Configuration
+	HyperliquidEnabled       bool
+	HyperliquidOIInterval    int
+	HyperliquidFundingInterval int
+	HypeHLOIStopThreshold    float64
+	HypeHLFRExtremeThreshold float64
+	HypeHLFRRecoveryThreshold float64
+	HypeHLSqueezePricePct    float64
+	HypeHLSqueezeOIDeclinePct float64
 }
 
 func Load() *Config {
@@ -71,6 +80,14 @@ func Load() *Config {
 	hypeLookbackKlines, _ := strconv.Atoi(getEnv("HYPE_LOOKBACK_KLINES", "12"))
 	hypeFundingInterval, _ := strconv.Atoi(getEnv("HYPE_FUNDING_INTERVAL", "30"))
 	hypeOnlyMode := getEnv("HYPE_ONLY_MODE", "false") == "true"
+	hyperliquidEnabled := getEnv("HYPERLIQUID_ENABLED", "false") == "true"
+	hyperliquidOIInterval, _ := strconv.Atoi(getEnv("HYPERLIQUID_OI_INTERVAL", "10"))
+	hyperliquidFundingInterval, _ := strconv.Atoi(getEnv("HYPERLIQUID_FUNDING_INTERVAL", "60"))
+	hypeHLOIStopThreshold, _ := strconv.ParseFloat(getEnv("HYPE_HL_OI_STOP_THRESHOLD", "-0.10"), 64)
+	hypeHLFRExtremeThreshold, _ := strconv.ParseFloat(getEnv("HYPE_HL_FR_EXTREME_THRESHOLD", "-0.0001"), 64)
+	hypeHLFRRecoveryThreshold, _ := strconv.ParseFloat(getEnv("HYPE_HL_FR_RECOVERY_THRESHOLD", "0.3"), 64)
+	hypeHLSqueezePricePct, _ := strconv.ParseFloat(getEnv("HYPE_HL_SQUEEZE_PRICE_PCT", "0.5"), 64)
+	hypeHLSqueezeOIDeclinePct, _ := strconv.ParseFloat(getEnv("HYPE_HL_SQUEEZE_OI_DECLINE_PCT", "0.05"), 64)
 
 	return &Config{
 		LarkWebhookURL: getEnv("LARK_WEBHOOK_URL", ""),
@@ -100,6 +117,14 @@ func Load() *Config {
 		HypeCooldownMinutes:   hypeCooldownMinutes,
 		HypeLookbackKlines:    hypeLookbackKlines,
 		HypeFundingInterval:   hypeFundingInterval,
+		HyperliquidEnabled:       hyperliquidEnabled,
+		HyperliquidOIInterval:    hyperliquidOIInterval,
+		HyperliquidFundingInterval: hyperliquidFundingInterval,
+		HypeHLOIStopThreshold:    hypeHLOIStopThreshold,
+		HypeHLFRExtremeThreshold: hypeHLFRExtremeThreshold,
+		HypeHLFRRecoveryThreshold: hypeHLFRRecoveryThreshold,
+		HypeHLSqueezePricePct:    hypeHLSqueezePricePct,
+		HypeHLSqueezeOIDeclinePct: hypeHLSqueezeOIDeclinePct,
 	}
 }
 

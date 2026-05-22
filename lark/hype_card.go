@@ -11,10 +11,15 @@ type HypeCardElement = interface{}
 
 // FormatHypeCard 格式化HYPE信号为飞书卡片
 func FormatHypeCard(signal models.HypeSignal) LarkCardMessage {
+	sourceLabel := ""
+	if signal.Source != "" {
+		sourceLabel = fmt.Sprintf(" (%s)", signal.Source.String())
+	}
+
 	header := CardHeader{
 		Title: CardText{
 			Tag:     "plain_text",
-			Content: fmt.Sprintf("%s %s %s", signal.Symbol, signal.SignalType.Emoji(), signal.SignalType.String()),
+			Content: fmt.Sprintf("%s%s %s %s", signal.Symbol, sourceLabel, signal.SignalType.Emoji(), signal.SignalType.String()),
 		},
 		Template: signal.SignalType.HeaderTemplate(),
 	}
@@ -44,6 +49,19 @@ func buildHypeElements(signal models.HypeSignal) []HypeCardElement {
 			{IsShort: true, Text: CardText{Tag: "lark_md", Content: fmt.Sprintf("**阶段**: %s", signal.SignalType.String())}},
 		},
 	})
+
+	if signal.Source != "" {
+		sourceIcon := "🔵"
+		if signal.Source == models.SourceHyperliquid {
+			sourceIcon = "🟣"
+		}
+		elements = append(elements, DivElement{
+			Tag: "div",
+			Fields: []Field{
+				{IsShort: true, Text: CardText{Tag: "lark_md", Content: fmt.Sprintf("%s **来源**: %s", sourceIcon, signal.Source.String())}},
+			},
+		})
+	}
 
 	elements = append(elements, HrElement{Tag: "hr"})
 

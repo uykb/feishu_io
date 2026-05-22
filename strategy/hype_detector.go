@@ -19,30 +19,58 @@ type HypeDetectorConfig struct {
 	ADXThreshold         float64
 	ADXPeriod            int
 	ATRPeriod            int
+	// Hyperliquid-specific thresholds
+	HLOIStopThreshold    float64
+	HLFRExtremeThreshold float64
+	HLFRRecoveryThreshold float64
+	HLSqueezePricePct    float64
+	HLSqueezeOIDeclinePct float64
 }
 
 // HypeDetector HYPE专属信号检测器
 type HypeDetector struct {
-	config HypeDetectorConfig
-	state  *HypeState
+	config   HypeDetectorConfig
+	state    *HypeState
 	signalCh chan models.HypeSignal
 	symbol   string
+	source   models.DataSource
 }
 
 // NewHypeDetector 创建HYPE检测器
-func NewHypeDetector(symbol string, config HypeDetectorConfig, signalCh chan models.HypeSignal) *HypeDetector {
+func NewHypeDetector(symbol string, source models.DataSource, config HypeDetectorConfig, signalCh chan models.HypeSignal) *HypeDetector {
 	return &HypeDetector{
 		config:   config,
 		state:    NewHypeState(),
 		signalCh: signalCh,
 		symbol:   symbol,
+		source:   source,
 	}
+}
+
+// thresholds 根据数据源返回对应阈值
+func (hd *HypeDetector) thresholds() HypeDetectorConfig {
+	if hd.source == models.SourceHyperliquid {
+		return HypeDetectorConfig{
+			OIStopThreshold:      hd.config.HLOIStopThreshold,
+			FRExtremeThreshold:   hd.config.HLFRExtremeThreshold,
+			FRRecoveryThreshold:  hd.config.HLFRRecoveryThreshold,
+			SqueezePricePct:      hd.config.HLSqueezePricePct,
+			SqueezeOIDeclinePct:  hd.config.HLSqueezeOIDeclinePct,
+			HigherLowPct:         hd.config.HigherLowPct,
+			CooldownMinutes:      hd.config.CooldownMinutes,
+			LookbackKlines:       hd.config.LookbackKlines,
+			ADXThreshold:         hd.config.ADXThreshold,
+			ADXPeriod:            hd.config.ADXPeriod,
+			ATRPeriod:            hd.config.ATRPeriod,
+		}
+	}
+	return hd.config
 }
 
 // ProcessKlineData 处理K线数据
 func (hd *HypeDetector) ProcessKlineData(klineDataCh <-chan models.KlineData) {
 	for kline := range klineDataCh {
-		if kline.Symbol != hd.symbol {
+		if kline.Symbol != hd.symbol || kline.Source != hd.source {
 			continue
 		}
 
@@ -54,7 +82,7 @@ func (hd *HypeDetector) ProcessKlineData(klineDataCh <-chan models.KlineData) {
 // ProcessOIData 处理OI数据
 func (hd *HypeDetector) ProcessOIData(oiDataCh <-chan models.OIData) {
 	for oiData := range oiDataCh {
-		if oiData.Symbol != hd.symbol {
+		if oiData.Symbol != hd.symbol || oiData.Source != hd.source {
 			continue
 		}
 
@@ -65,7 +93,7 @@ func (hd *HypeDetector) ProcessOIData(oiDataCh <-chan models.OIData) {
 // ProcessFundingRate 处理资金费率数据
 func (hd *HypeDetector) ProcessFundingRate(fundingCh <-chan models.FundingRateData) {
 	for frData := range fundingCh {
-		if frData.Symbol != hd.symbol {
+		if frData.Symbol != hd.symbol || frData.Source != hd.source {
 			continue
 		}
 
@@ -99,7 +127,6 @@ func (hd *HypeDetector) checkDowntrendAndBottom(kline models.KlineData, price, o
 		return
 	}
 
-	// 检查是否连续创新低
 	lowestPrice := hd.state.GetLowestPrice()
 	isNewLow := price <= lowestPrice
 
@@ -111,12 +138,10 @@ func (hd *HypeDetector) checkDowntrendAndBottom(kline models.KlineData, price, o
 		hd.state.ConsecutiveLowerLows = 0
 	}
 
-	// 信号1: DowntrendAccelerating - 加速下跌预警
 	if hd.checkDowntrendAccelerating(price, oiChange30m, fr, adx) {
 		return
 	}
 
-	// 信号2: PotentialBottom - 底部吸筹
 	if hd.checkPotentialBottom(price, oi, oiChange30m, fr, adx, kline.Timestamp) {
 		return
 	}
@@ -124,11 +149,18 @@ func (hd *HypeDetector) checkDowntrendAndBottom(kline models.KlineData, price, o
 
 // checkDowntrendAccelerating 检查加速下跌
 func (hd *HypeDetector) checkDowntrendAccelerating(price, oiChange30m, fr, adx float64) bool {
+	t := hd.thresholds()
+
+	frThreshold := 0.0005
+	if hd.source == models.SourceHyperliquid {
+		frThreshold = 0.00005
+	}
+
 	if oiChange30m >= -0.1 {
 		return false
 	}
 
-	if fr <= 0.0005 {
+	if fr <= frThreshold {
 		return false
 	}
 
@@ -136,13 +168,14 @@ func (hd *HypeDetector) checkDowntrendAccelerating(price, oiChange30m, fr, adx f
 		return false
 	}
 
-	cooldown := time.Duration(hd.config.CooldownMinutes) * time.Minute
+	cooldown := time.Duration(t.CooldownMinutes) * time.Minute
 	if !hd.state.CanSendSignal(models.DowntrendAccelerating, cooldown) {
 		return false
 	}
 
 	signal := models.HypeSignal{
 		Symbol:      hd.symbol,
+		Source:      hd.source,
 		SignalType:  models.DowntrendAccelerating,
 		Price:       price,
 		CurrentOI:   hd.state.GetCurrentOI(),
@@ -163,18 +196,20 @@ func (hd *HypeDetector) checkDowntrendAccelerating(price, oiChange30m, fr, adx f
 
 // checkPotentialBottom 检查底部吸筹信号
 func (hd *HypeDetector) checkPotentialBottom(price, oi, oiChange30m, fr, adx float64, ts time.Time) bool {
+	t := hd.thresholds()
+
 	lowestPrice := hd.state.GetLowestPrice()
-	isAtLow := price <= lowestPrice*(1+hd.config.HigherLowPct/100)
+	isAtLow := price <= lowestPrice*(1+t.HigherLowPct/100)
 
 	if !isAtLow {
 		return false
 	}
 
-	if oiChange30m > hd.config.OIStopThreshold {
+	if oiChange30m > t.OIStopThreshold {
 		return false
 	}
 
-	if fr > hd.config.FRExtremeThreshold {
+	if fr > t.FRExtremeThreshold {
 		return false
 	}
 
@@ -182,22 +217,16 @@ func (hd *HypeDetector) checkPotentialBottom(price, oi, oiChange30m, fr, adx flo
 		return false
 	}
 
-	cooldown := time.Duration(hd.config.CooldownMinutes) * time.Minute
+	cooldown := time.Duration(t.CooldownMinutes) * time.Minute
 	if !hd.state.CanSendSignal(models.PotentialBottom, cooldown) {
 		return false
 	}
 
-	frStatus := "正常"
-	if fr < -0.001 {
-		frStatus = "极度拥挤"
-	} else if fr < -0.0005 {
-		frStatus = "拥挤"
-	} else if fr < -0.0002 {
-		frStatus = "偏空"
-	}
+	frStatus := hd.formatFRStatus(fr)
 
 	signal := models.HypeSignal{
 		Symbol:      hd.symbol,
+		Source:      hd.source,
 		SignalType:  models.PotentialBottom,
 		Price:       price,
 		LowestPrice: lowestPrice,
@@ -221,13 +250,14 @@ func (hd *HypeDetector) checkPotentialBottom(price, oi, oiChange30m, fr, adx flo
 
 // checkBottomConfirmed 检查Higher Low确认
 func (hd *HypeDetector) checkBottomConfirmed(kline models.KlineData, price, oi, fr, adx float64) {
+	t := hd.thresholds()
 	lowestPrice := hd.state.GetLowestPrice()
 
 	if lowestPrice == 0 {
 		return
 	}
 
-	higherLowThreshold := lowestPrice * (1 + hd.config.HigherLowPct/100)
+	higherLowThreshold := lowestPrice * (1 + t.HigherLowPct/100)
 
 	if price < higherLowThreshold {
 		return
@@ -252,17 +282,18 @@ func (hd *HypeDetector) checkBottomConfirmed(kline models.KlineData, price, oi, 
 		frRecovery = (currentFR - oldFR) / (-oldFR)
 	}
 
-	if frRecovery < hd.config.FRRecoveryThreshold {
+	if frRecovery < t.FRRecoveryThreshold {
 		return
 	}
 
-	cooldown := time.Duration(hd.config.CooldownMinutes) * time.Minute
+	cooldown := time.Duration(t.CooldownMinutes) * time.Minute
 	if !hd.state.CanSendSignal(models.BottomConfirmed, cooldown) {
 		return
 	}
 
 	signal := models.HypeSignal{
 		Symbol:      hd.symbol,
+		Source:      hd.source,
 		SignalType:  models.BottomConfirmed,
 		Price:       price,
 		LowestPrice: lowestPrice,
@@ -298,6 +329,8 @@ func (hd *HypeDetector) checkRallyAndReversal(kline models.KlineData, price, oi,
 
 // checkShortSqueeze 检查轧空拉升
 func (hd *HypeDetector) checkShortSqueeze(kline models.KlineData, price, oi, fr, adx float64) {
+	t := hd.thresholds()
+
 	oiHistory := hd.state.GetOIHistory(6)
 	if len(oiHistory) < 2 {
 		return
@@ -312,11 +345,11 @@ func (hd *HypeDetector) checkShortSqueeze(kline models.KlineData, price, oi, fr,
 
 	priceChange := (price - kline.Open) / kline.Open * 100
 
-	if priceChange < hd.config.SqueezePricePct {
+	if priceChange < t.SqueezePricePct {
 		return
 	}
 
-	if oiDecline > -hd.config.SqueezeOIDeclinePct {
+	if oiDecline > -t.SqueezeOIDeclinePct {
 		return
 	}
 
@@ -326,16 +359,14 @@ func (hd *HypeDetector) checkShortSqueeze(kline models.KlineData, price, oi, fr,
 		frRecovery = (currentFR - oldFR) / (-oldFR)
 	}
 
-	if frRecovery < 0.3 && fr > 0 {
-	}
-
-	cooldown := time.Duration(hd.config.CooldownMinutes) * time.Minute
+	cooldown := time.Duration(t.CooldownMinutes) * time.Minute
 	if !hd.state.CanSendSignal(models.ShortSqueezeRally, cooldown) {
 		return
 	}
 
 	signal := models.HypeSignal{
 		Symbol:      hd.symbol,
+		Source:      hd.source,
 		SignalType:  models.ShortSqueezeRally,
 		Price:       price,
 		PriceChange: priceChange,
@@ -358,6 +389,8 @@ func (hd *HypeDetector) checkShortSqueeze(kline models.KlineData, price, oi, fr,
 
 // checkTrendReversal 检查趋势反转
 func (hd *HypeDetector) checkTrendReversal(kline models.KlineData, price, oi, fr, adx float64) {
+	t := hd.thresholds()
+
 	oiChange60m, hasOI := hd.state.GetRecentOIChange(60)
 	if !hasOI {
 		return
@@ -375,13 +408,14 @@ func (hd *HypeDetector) checkTrendReversal(kline models.KlineData, price, oi, fr
 		return
 	}
 
-	cooldown := time.Duration(hd.config.CooldownMinutes) * time.Minute
+	cooldown := time.Duration(t.CooldownMinutes) * time.Minute
 	if !hd.state.CanSendSignal(models.TrendReversal, cooldown) {
 		return
 	}
 
 	signal := models.HypeSignal{
 		Symbol:      hd.symbol,
+		Source:      hd.source,
 		SignalType:  models.TrendReversal,
 		Price:       price,
 		PriceChange: (price - kline.Open) / kline.Open * 100,
@@ -413,12 +447,55 @@ func (hd *HypeDetector) calculateADX(currentKline models.KlineData) float64 {
 	return CalculateADX(history, hd.config.ADXPeriod)
 }
 
+// formatFRStatus 格式化资金费率状态（按数据源）
+func (hd *HypeDetector) formatFRStatus(rate float64) string {
+	if hd.source == models.SourceHyperliquid {
+		ratePct := rate * 100
+		if ratePct > 0.0001 {
+			return "🟢 多头拥挤"
+		} else if ratePct > 0.00005 {
+			return "🟡 多头偏多"
+		} else if ratePct > 0 {
+			return "⚪ 轻微偏多"
+		} else if ratePct == 0 {
+			return "⚪ 中性"
+		} else if ratePct > -0.00002 {
+			return "⚪ 轻微偏空"
+		} else if ratePct > -0.00005 {
+			return "🟡 空头偏空"
+		} else if ratePct > -0.0001 {
+			return "🔴 空头拥挤"
+		} else {
+			return "🔴 极度拥挤"
+		}
+	}
+
+	ratePct := rate * 100
+	if ratePct > 0.001 {
+		return "🟢 多头拥挤"
+	} else if ratePct > 0.0005 {
+		return "🟡 多头偏多"
+	} else if ratePct > 0 {
+		return "⚪ 轻微偏多"
+	} else if ratePct == 0 {
+		return "⚪ 中性"
+	} else if ratePct > -0.0002 {
+		return "⚪ 轻微偏空"
+	} else if ratePct > -0.0005 {
+		return "🟡 空头偏空"
+	} else if ratePct > -0.001 {
+		return "🔴 空头拥挤"
+	} else {
+		return "🔴 极度拥挤"
+	}
+}
+
 // emitSignal 发送信号
 func (hd *HypeDetector) emitSignal(signal models.HypeSignal) {
 	select {
 	case hd.signalCh <- signal:
-		log.Printf("[HYPE] 触发信号: %s %s (价格: $%.2f, OI: %.0f, 费率: %.5f%%)",
-			hd.symbol, signal.SignalType.String(), signal.Price, signal.CurrentOI, signal.FundingRate*100)
+		log.Printf("[HYPE][%s] 触发信号: %s %s (价格: $%.2f, OI: %.0f, 费率: %.5f%%)",
+			hd.source.String(), hd.symbol, signal.SignalType.String(), signal.Price, signal.CurrentOI, signal.FundingRate*100)
 	default:
 		log.Printf("[HYPE] 信号通道已满，丢弃 %s 信号", hd.symbol)
 	}

@@ -5,6 +5,7 @@ import "time"
 // KlineData 15分钟K线数据
 type KlineData struct {
 	Symbol    string
+	Source    DataSource
 	Timestamp time.Time
 	Open      float64
 	Close     float64
@@ -14,9 +15,10 @@ type KlineData struct {
 
 // OIData 持仓量数据
 type OIData struct {
-	Symbol         string
-	OpenInterest   float64
-	Timestamp      time.Time
+	Symbol       string
+	Source       DataSource
+	OpenInterest float64
+	Timestamp    time.Time
 }
 
 // MarketData 市场数据汇总
