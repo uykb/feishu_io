@@ -303,8 +303,15 @@ func (of *OIFetcher) fetchOI(symbol string) (models.OIData, error) {
 func (of *OIFetcher) GetSymbols() []string {
 	of.mu.RLock()
 	defer of.mu.RUnlock()
-	// 返回一个副本以防止外部修改
 	symbolsCopy := make([]string, len(of.symbols))
 	copy(symbolsCopy, of.symbols)
 	return symbolsCopy
+}
+
+// SetSymbols 设置交易对列表（用于指定监控特定交易对）
+func (of *OIFetcher) SetSymbols(symbols []string) {
+	of.mu.Lock()
+	defer of.mu.Unlock()
+	of.symbols = symbols
+	log.Printf("手动设置交易对列表: %d 个交易对 %v", len(symbols), symbols)
 }

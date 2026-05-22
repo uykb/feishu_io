@@ -28,6 +28,7 @@ type Config struct {
 	PossibleFakeoutWeight float64
 	MarketContractionWeight float64
 	// HYPE Strategy Configuration
+	HypeOnlyMode            bool
 	HypeSymbol            string
 	HypeOIStopThreshold   float64
 	HypeFRExtremeThreshold float64
@@ -69,6 +70,7 @@ func Load() *Config {
 	hypeCooldownMinutes, _ := strconv.Atoi(getEnv("HYPE_COOLDOWN_MINUTES", "15"))
 	hypeLookbackKlines, _ := strconv.Atoi(getEnv("HYPE_LOOKBACK_KLINES", "12"))
 	hypeFundingInterval, _ := strconv.Atoi(getEnv("HYPE_FUNDING_INTERVAL", "30"))
+	hypeOnlyMode := getEnv("HYPE_ONLY_MODE", "false") == "true"
 
 	return &Config{
 		LarkWebhookURL: getEnv("LARK_WEBHOOK_URL", ""),
@@ -87,6 +89,7 @@ func Load() *Config {
 		BearishMomentumWeight: bearishMomentumWeight,
 		PossibleFakeoutWeight: possibleFakeoutWeight,
 		MarketContractionWeight: marketContractionWeight,
+		HypeOnlyMode:            hypeOnlyMode,
 		HypeSymbol:            getEnv("HYPE_SYMBOL", "HYPEUSDT"),
 		HypeOIStopThreshold:   hypeOIStopThreshold,
 		HypeFRExtremeThreshold: hypeFRExtremeThreshold,
