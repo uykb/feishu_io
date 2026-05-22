@@ -274,6 +274,7 @@ binance-monitor.exe      # Windows
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
+| `HYPE_ONLY_MODE` | 是否仅监控HYPE（开启后跳过全量交易对） | false |
 | `HYPE_SYMBOL` | HYPE交易对名称 | HYPEUSDT |
 | `HYPE_OI_STOP_THRESHOLD` | OI止跌阈值（%），OI变化率大于此值认为止跌 | -0.15 |
 | `HYPE_FR_EXTREME_THRESHOLD` | 资金费率极端阈值，低于此值认为空头极度拥挤 | -0.0005 |
@@ -284,6 +285,48 @@ binance-monitor.exe      # Windows
 | `HYPE_COOLDOWN_MINUTES` | 同类型信号冷却时间（分钟） | 15 |
 | `HYPE_LOOKBACK_KLINES` | 回溯K线数量 | 12 |
 | `HYPE_FUNDING_INTERVAL` | 资金费率轮询间隔（秒） | 30 |
+
+## 运行模式
+
+### 全量模式（默认）
+
+监控全部 524 个 USDT 永续合约交易对，同时叠加 HYPE 专属策略。
+
+```env
+HYPE_ONLY_MODE=false
+```
+
+**资源消耗：**
+- WebSocket 订阅：524 个流
+- OI 轮询：524 个交易对（~1680 req/min）
+- 通用检测器：全部交易对
+- HYPE 检测器：HYPEUSDT
+- 资金费率：HYPEUSDT
+
+### HYPE 专属模式
+
+仅监控 HYPEUSDT 一个交易对，大幅降低 API 压力。
+
+```env
+HYPE_ONLY_MODE=true
+```
+
+**资源消耗：**
+- WebSocket 订阅：1 个流
+- OI 轮询：1 个交易对（~6 req/min）
+- 通用检测器：跳过
+- HYPE 检测器：HYPEUSDT
+- 资金费率：HYPEUSDT
+
+### 模式对比
+
+| | 全量模式 | HYPE专属模式 |
+|:--|:--|:--|
+| 交易对获取 | 524个 | 跳过 |
+| WebSocket订阅 | 524个流 | 仅 HYPEUSDT |
+| OI轮询 | 524个并发 | 仅 HYPEUSDT |
+| 通用检测器 | 启动 | 跳过 |
+| API压力 | 高 | 极低 |
 
 ## 消息示例
 
