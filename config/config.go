@@ -79,7 +79,7 @@ func Load() *Config {
 	hypeCooldownMinutes, _ := strconv.Atoi(getEnv("HYPE_COOLDOWN_MINUTES", "10"))
 	hypeLookbackKlines, _ := strconv.Atoi(getEnv("HYPE_LOOKBACK_KLINES", "12"))
 	hypeFundingInterval, _ := strconv.Atoi(getEnv("HYPE_FUNDING_INTERVAL", "30"))
-	hypeOnlyMode := getEnv("HYPE_ONLY_MODE", "false") == "true"
+	hypeOnlyMode := getEnv("HYPE_ONLY_MODE", "true") == "true"
 	hyperliquidEnabled := getEnv("HYPERLIQUID_ENABLED", "false") == "true"
 	hyperliquidOIInterval, _ := strconv.Atoi(getEnv("HYPERLIQUID_OI_INTERVAL", "10"))
 	hyperliquidFundingInterval, _ := strconv.Atoi(getEnv("HYPERLIQUID_FUNDING_INTERVAL", "60"))
